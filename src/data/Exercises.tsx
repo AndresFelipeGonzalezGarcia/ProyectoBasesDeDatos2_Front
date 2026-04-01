@@ -21,4 +21,11 @@ export const exerciseDatabase = [
     imageUrl:
       "https://images.unsplash.com/photo-1565990881107-160fa41a995e?q=80&w=400",
   },
+  {
+    id: "4",
+    name: "SENTADILLA ",
+    muscle: "Cuádriceps / Glúteos",
+    imageUrl:
+      "https://images.unsplash.com/photo-1565990881107-160fa41a995e?q=80&w=400",
+  },
 ];

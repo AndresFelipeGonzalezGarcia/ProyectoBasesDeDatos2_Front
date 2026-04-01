@@ -79,7 +79,7 @@ function ExerciseCard({ name, muscle, imageUrl, onRemove }: ExerciseProps) {
         alt={name}
         style={{
           filter: "grayscale(100%) contrast(120%)",
-          height: "200px",
+          height: "700px",
           objectFit: "cover",
         }}
       />
