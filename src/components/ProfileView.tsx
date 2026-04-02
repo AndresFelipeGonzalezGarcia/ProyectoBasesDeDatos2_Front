@@ -1,3 +1,4 @@
+import pesa from "../assets/pesa.png";
 interface ProfileProps {
   userName: string;
   totalWorkouts: number;
@@ -17,7 +18,7 @@ function ProfileView({ userName, totalWorkouts }: ProfileProps) {
       id: 1,
       name: "PRIMERA SANGRE",
       desc: "Completaste tu primer entrenamiento.",
-      icon: "🩸",
+      image: pesa,
       unlocked: true,
     },
     {
@@ -124,7 +125,19 @@ function ProfileView({ userName, totalWorkouts }: ProfileProps) {
                   style={{ opacity: ach.unlocked ? 1 : 0.6 }}
                 >
                   <div className="card-body text-center">
-                    <div className="display-4 mb-2">{ach.icon}</div>
+                    <div className="mb-2">
+                      {ach.image && (
+                        <img
+                          src={ach.image}
+                          alt={ach.name}
+                          style={{
+                            width: "60px",
+                            height: "60px",
+                            objectFit: "contain",
+                          }}
+                        />
+                      )}
+                    </div>
                     <h5
                       className={`fw-bold text-uppercase ${ach.unlocked ? "text-white" : "text-secondary"}`}
                     >

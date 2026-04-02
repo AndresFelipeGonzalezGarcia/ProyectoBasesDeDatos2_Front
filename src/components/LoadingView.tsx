@@ -1,3 +1,4 @@
+import bug from "../assets/bug.png";
 import { useState } from "react";
 
 interface LoadingProps {
@@ -37,11 +38,19 @@ function LoadingView({ onLogin }: LoadingProps) {
     >
       {!showForm ? (
         <div className="animate__animated animate__fadeInDown px-3">
+          <div style={{ height: "400px", overflow: "hidden" }}>
+            <img
+              src={bug}
+              alt="Logo"
+              style={{ width: "600px", marginTop: "-50px" }}
+            />
+          </div>
+
           <h1
             className="text-white display-1 fw-bold mb-0"
             style={{
               fontFamily: "'Anton', sans-serif",
-              letterSpacing: "4px",
+              letterSpacing: "2px",
               fontSize: "clamp(3rem, 10vw, 6rem)",
             }}
           >

@@ -1,3 +1,4 @@
+import bug from "../assets/bug.png";
 interface NavBarProps {
   // Añadimos 'routines' y 'profile' a las opciones posibles
   currentView: "routines" | "workout" | "olimpo" | "profile";
@@ -19,6 +20,7 @@ function NavBar({ currentView, onViewChange, onLogout }: NavBarProps) {
           }}
           onClick={() => onViewChange("routines")}
         >
+          <img src={bug} alt="Logo" width="60" height="60" />
           BUGGY'S <span className="text-danger">FIT</span>
         </span>
 
@@ -28,14 +30,14 @@ function NavBar({ currentView, onViewChange, onLogout }: NavBarProps) {
             className={`btn btn-sm fw-bold ${currentView === "routines" ? "btn-danger" : "btn-outline-secondary border-0 text-white"}`}
             onClick={() => onViewChange("routines")}
           >
-            📋 RUTINAS
+            RUTINAS
           </button>
 
           <button
             className={`btn btn-sm fw-bold ${currentView === "workout" ? "btn-danger" : "btn-outline-secondary border-0 text-white"}`}
             onClick={() => onViewChange("workout")}
           >
-            🔥 ENTRENAR
+            ENTRENAR
           </button>
 
           <button
@@ -49,7 +51,7 @@ function NavBar({ currentView, onViewChange, onLogout }: NavBarProps) {
             className={`btn btn-sm fw-bold ${currentView === "profile" ? "btn-danger" : "btn-outline-secondary border-0 text-white"}`}
             onClick={() => onViewChange("profile")}
           >
-            👤 PERFIL
+            PERFIL
           </button>
 
           <button
