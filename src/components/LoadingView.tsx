@@ -8,17 +8,17 @@ interface LoadingProps {
 function LoadingView({ onLogin }: LoadingProps) {
   const [showForm, setShowForm] = useState(false);
   const [isLogin, setIsLogin] = useState(true);
+
   const [warriorName, setWarriorName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const finalName = isLogin ? "Guerrero Veterano" : warriorName;
-
-    onLogin(finalName);
+    onLogin(warriorName.trim());
   };
 
-  // Funciones de validación para los campos numéricos
   const blockInvalidNumberKeys = (e: React.KeyboardEvent) => {
     if (["e", "E", "+", "-", ".", ","].includes(e.key)) {
       e.preventDefault();
@@ -95,21 +95,24 @@ function LoadingView({ onLogin }: LoadingProps) {
           </h2>
 
           <form onSubmit={handleSubmit} className="text-start">
+            {/* CAMPO DE NOMBRE: APARECE SIEMPRE */}
+            <div className="mb-3 animate__animated animate__fadeIn">
+              <label className="form-label text-secondary fw-bold small">
+                NOMBRE DE GUERRERO
+              </label>
+              <input
+                type="text"
+                className="form-control bg-dark text-white border-secondary shadow-none text-center fw-bold"
+                required
+                placeholder="Ej: ADMIN, El_Tanque..."
+                value={warriorName}
+                onChange={(e) => setWarriorName(e.target.value)}
+              />
+            </div>
+
             {/* CAMPOS EXCLUSIVOS DE REGISTRO */}
             {!isLogin && (
-              <>
-                <div className="mb-3 animate__animated animate__fadeIn">
-                  <label className="form-label text-secondary fw-bold small">
-                    NOMBRE DE GUERRERO
-                  </label>
-                  <input
-                    type="text"
-                    className="form-control bg-dark text-white border-secondary shadow-none"
-                    required
-                    placeholder="Tu alias..."
-                  />
-                </div>
-
+              <div className="animate__animated animate__fadeIn">
                 <div className="row mb-3">
                   <div className="col-6">
                     <label className="form-label text-secondary fw-bold small">
@@ -149,30 +152,35 @@ function LoadingView({ onLogin }: LoadingProps) {
                     <option value="o">OTRO</option>
                   </select>
                 </div>
-              </>
+
+                <div className="mb-3">
+                  <label className="form-label text-secondary fw-bold small">
+                    CORREO ELECTRÓNICO
+                  </label>
+                  <input
+                    type="email"
+                    className="form-control bg-dark text-white border-secondary shadow-none text-center"
+                    required
+                    placeholder="correo@olimpo.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                </div>
+              </div>
             )}
 
-            <div className="mb-3">
-              <label className="form-label text-secondary fw-bold small">
-                CORREO ELECTRÓNICO
-              </label>
-              <input
-                type="email"
-                className="form-control bg-dark text-white border-secondary shadow-none"
-                required
-                placeholder="correo@olimpo.com"
-              />
-            </div>
-
+            {/* LA CONTRASEÑA SE PIDE SIEMPRE */}
             <div className="mb-4">
               <label className="form-label text-secondary fw-bold small">
                 CONTRASEÑA
               </label>
               <input
                 type="password"
-                className="form-control bg-dark text-white border-secondary shadow-none"
+                className="form-control bg-dark text-white border-secondary shadow-none text-center"
                 required
                 placeholder="********"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
               />
             </div>
 

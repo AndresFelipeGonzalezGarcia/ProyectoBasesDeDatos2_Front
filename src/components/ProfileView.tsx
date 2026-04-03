@@ -1,46 +1,56 @@
 import pesa from "../assets/pesa.png";
+import mano from "../assets/mano.png";
+import torre from "../assets/torre.png";
+import copa from "../assets/copa.png";
+
 interface ProfileProps {
   userName: string;
   totalWorkouts: number;
+  challengesWon: number;
+  totalVolumeKg: number;
 }
 
-function ProfileView({ userName, totalWorkouts }: ProfileProps) {
-  // Las estadísticas ahora son dinámicas
+function ProfileView({
+  userName,
+  totalWorkouts,
+  challengesWon,
+  totalVolumeKg,
+}: ProfileProps) {
   const stats = {
     totalWorkouts: totalWorkouts,
-    totalVolumeKg: totalWorkouts * 1250,
-    challengesWon: 0,
+    totalVolumeKg: totalVolumeKg,
+    challengesWon: challengesWon,
     level: totalWorkouts > 10 ? "GUERRERO DE ÉLITE" : "INICIADO DEL OLIMPO",
   };
 
   const achievements = [
     {
       id: 1,
-      name: "PRIMERA SANGRE",
+      name: "PRIMER LEVANTAMIENTO",
       desc: "Completaste tu primer entrenamiento.",
       image: pesa,
-      unlocked: true,
+      unlocked: totalWorkouts >= 1,
     },
     {
       id: 2,
       name: "TITÁN DE ACERO",
       desc: "Levantaste más de 10,000 kg en total.",
-      icon: "🦾",
-      unlocked: true,
+      image: mano,
+      unlocked: totalVolumeKg >= 10000,
     },
     {
       id: 3,
-      name: "REY DE LA ARENA",
-      desc: "Gana 5 retos en el Olimpo.",
-      icon: "👑",
-      unlocked: false,
+      name: "TORRE DE HIERRO",
+      desc: "Lograste ganar 5 retos.",
+      image: torre,
+      unlocked: challengesWon >= 5,
     },
     {
       id: 4,
       name: "DISCIPLINA",
-      desc: "Entrena 5 días seguidos.",
-      icon: "🔥",
-      unlocked: false,
+      desc: "Completaste 10 entrenamientos consecutivos.",
+      image: copa,
+      unlocked: totalWorkouts >= 10,
     },
   ];
 
@@ -114,12 +124,9 @@ function ProfileView({ userName, totalWorkouts }: ProfileProps) {
             MEDALLAS DE GUERRA
           </h3>
 
-          {/* Columna de Logros */}
-
           <div className="row">
             {achievements.map((ach) => (
               <div key={ach.id} className="col-sm-6 mb-3">
-                {/* Ajustamos la opacidad base para que se vea mejor aunque esté bloqueado */}
                 <div
                   className={`card h-100 bg-black border-${ach.unlocked ? "danger" : "secondary"} shadow-sm`}
                   style={{ opacity: ach.unlocked ? 1 : 0.6 }}
@@ -143,7 +150,6 @@ function ProfileView({ userName, totalWorkouts }: ProfileProps) {
                     >
                       {ach.name}
                     </h5>
-                    {/* CAMBIO AQUÍ: Usamos text-light en lugar de text-muted para que contraste */}
                     <p className="small text-light opacity-75 m-0">
                       {ach.desc}
                     </p>

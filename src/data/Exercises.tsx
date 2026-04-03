@@ -1,4 +1,4 @@
-// Simulamos lo que nos devolvería la API del Backend
+
 export const exerciseDatabase = [
   {
     id: "1",

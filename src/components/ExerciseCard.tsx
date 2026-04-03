@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import RestTimer from "./RestTimer";
 
 interface ExerciseProps {
@@ -6,6 +6,7 @@ interface ExerciseProps {
   muscle: string;
   imageUrl: string;
   onRemove: () => void;
+  onUpdateVolume?: (volume: number) => void;
 }
 
 interface WorkoutSet {
@@ -13,12 +14,28 @@ interface WorkoutSet {
   reps: number;
 }
 
-function ExerciseCard({ name, muscle, imageUrl, onRemove }: ExerciseProps) {
+function ExerciseCard({
+  name,
+  muscle,
+  imageUrl,
+  onRemove,
+  onUpdateVolume,
+}: ExerciseProps) {
   const [sets, setSets] = useState<WorkoutSet[]>([]);
   const [currentWeight, setCurrentWeight] = useState("");
   const [currentReps, setCurrentReps] = useState("");
   const [isResting, setIsResting] = useState(false);
   const [restSeconds, setRestSeconds] = useState(60);
+
+  useEffect(() => {
+    if (onUpdateVolume) {
+      const totalVolume = sets.reduce(
+        (sum, set) => sum + set.weight * set.reps,
+        0,
+      );
+      onUpdateVolume(totalVolume);
+    }
+  }, [sets, onUpdateVolume]);
 
   const handleSaveSet = () => {
     if (currentWeight && currentReps) {
@@ -38,14 +55,12 @@ function ExerciseCard({ name, muscle, imageUrl, onRemove }: ExerciseProps) {
     setSets(updatedSets);
   };
 
-  // Función auxiliar para bloquear teclas no deseadas en el Peso (permite decimales)
   const blockInvalidWeightKeys = (e: React.KeyboardEvent) => {
     if (["e", "E", "+", "-"].includes(e.key)) {
       e.preventDefault();
     }
   };
 
-  // Función auxiliar para bloquear teclas no deseadas en las Reps (bloquea decimales)
   const blockInvalidRepsKeys = (e: React.KeyboardEvent) => {
     if (["e", "E", "+", "-", ".", ","].includes(e.key)) {
       e.preventDefault();
@@ -136,7 +151,7 @@ function ExerciseCard({ name, muscle, imageUrl, onRemove }: ExerciseProps) {
                 className="form-control form-control-sm bg-black text-white border-secondary text-center fw-bold"
                 placeholder="KG"
                 value={currentWeight}
-                onKeyDown={blockInvalidWeightKeys} //
+                onKeyDown={blockInvalidWeightKeys}
                 onChange={(e) => setCurrentWeight(e.target.value)}
               />
             </div>
@@ -148,7 +163,7 @@ function ExerciseCard({ name, muscle, imageUrl, onRemove }: ExerciseProps) {
                 className="form-control form-control-sm bg-black text-white border-secondary text-center fw-bold"
                 placeholder="REPS"
                 value={currentReps}
-                onKeyDown={blockInvalidRepsKeys} //
+                onKeyDown={blockInvalidRepsKeys}
                 onChange={(e) => setCurrentReps(e.target.value)}
               />
             </div>

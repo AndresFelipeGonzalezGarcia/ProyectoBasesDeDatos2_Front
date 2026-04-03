@@ -1,12 +1,20 @@
 import bug from "../assets/bug.png";
+
 interface NavBarProps {
-  // Añadimos 'routines' y 'profile' a las opciones posibles
-  currentView: "routines" | "workout" | "olimpo" | "profile";
-  onViewChange: (view: "routines" | "workout" | "olimpo" | "profile") => void;
+  currentView: "routines" | "workout" | "olimpo" | "profile" | "admin";
+  onViewChange: (
+    view: "routines" | "workout" | "olimpo" | "profile" | "admin",
+  ) => void;
   onLogout: () => void;
+  userName: string;
 }
 
-function NavBar({ currentView, onViewChange, onLogout }: NavBarProps) {
+function NavBar({
+  currentView,
+  onViewChange,
+  onLogout,
+  userName,
+}: NavBarProps) {
   return (
     <nav className="navbar navbar-dark bg-black border-bottom border-secondary sticky-top shadow">
       <div className="container-fluid px-3 px-md-5">
@@ -53,6 +61,14 @@ function NavBar({ currentView, onViewChange, onLogout }: NavBarProps) {
           >
             PERFIL
           </button>
+          {userName.toUpperCase() === "ADMIN" && (
+            <button
+              className={`btn fw-bold ${currentView === "admin" ? "btn-danger" : "btn-outline-danger"} ms-2`}
+              onClick={() => onViewChange("admin")}
+            >
+              ADMIN
+            </button>
+          )}
 
           <button
             className="btn btn-link text-secondary text-decoration-none p-0 ms-2"
