@@ -2,21 +2,42 @@ import bug from "../assets/bug.png";
 import { useState } from "react";
 
 interface LoadingProps {
-  onLogin: (name: string) => void;
+  onLogin: (name: string, password: string) => void;
+
+  onRegister: (data: {
+    name: string;
+    email: string;
+    age: number;
+    weight: number;
+    sex: string;
+  }) => void;
 }
 
-function LoadingView({ onLogin }: LoadingProps) {
+function LoadingView({ onLogin, onRegister }: LoadingProps) {
   const [showForm, setShowForm] = useState(false);
   const [isLogin, setIsLogin] = useState(true);
 
   const [warriorName, setWarriorName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [age, setAge] = useState("");
+  const [weight, setWeight] = useState("");
+  const [sex, setSex] = useState("m");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    onLogin(warriorName.trim());
+    if (isLogin) {
+      onLogin(warriorName.trim(), password);
+    } else {
+      onRegister({
+        name: warriorName.trim(),
+        email: email,
+        age: Number(age),
+        weight: Number(weight),
+        sex: sex,
+      });
+    }
   };
 
   const blockInvalidNumberKeys = (e: React.KeyboardEvent) => {
@@ -24,7 +45,6 @@ function LoadingView({ onLogin }: LoadingProps) {
       e.preventDefault();
     }
   };
-
   return (
     <div
       className="d-flex flex-column justify-content-center align-items-center text-center min-vh-100"
@@ -98,7 +118,7 @@ function LoadingView({ onLogin }: LoadingProps) {
             {/* CAMPO DE NOMBRE: APARECE SIEMPRE */}
             <div className="mb-3 animate__animated animate__fadeIn">
               <label className="form-label text-secondary fw-bold small">
-                NOMBRE DE GUERRERO
+                NOMBRE DE USUARIO
               </label>
               <input
                 type="text"
@@ -124,6 +144,8 @@ function LoadingView({ onLogin }: LoadingProps) {
                       className="form-control bg-dark text-white border-secondary shadow-none text-center"
                       required
                       placeholder="Años"
+                      value={age}
+                      onChange={(e) => setAge(e.target.value)}
                       onKeyDown={blockInvalidNumberKeys}
                     />
                   </div>
@@ -136,6 +158,8 @@ function LoadingView({ onLogin }: LoadingProps) {
                       min="0"
                       className="form-control bg-dark text-white border-secondary shadow-none text-center"
                       required
+                      value={weight}
+                      onChange={(e) => setWeight(e.target.value)}
                       placeholder="kg"
                       onKeyDown={blockInvalidNumberKeys}
                     />
@@ -146,7 +170,11 @@ function LoadingView({ onLogin }: LoadingProps) {
                   <label className="form-label text-secondary fw-bold small">
                     SEXO
                   </label>
-                  <select className="form-select bg-dark text-white border-secondary shadow-none">
+                  <select
+                    className="form-select bg-dark text-white border-secondary shadow-none"
+                    value={sex}
+                    onChange={(e) => setSex(e.target.value)}
+                  >
                     <option value="m">MASCULINO</option>
                     <option value="f">FEMENINO</option>
                     <option value="o">OTRO</option>

@@ -23,6 +23,8 @@ export interface User {
   email: string;
   role: string;
   status: "Activo" | "Baneado";
+  age: number;
+  weight: number;
 }
 
 export interface SavedRoutine {

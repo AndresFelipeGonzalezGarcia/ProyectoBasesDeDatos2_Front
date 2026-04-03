@@ -5,21 +5,16 @@ import LoadingView from "./components/LoadingView";
 import OlimpoView from "./components/OlimpoView";
 import ProfileView from "./components/ProfileView";
 import AdminView from "./components/AdminView";
-import { exerciseDatabase } from "./data/Exercises"; // Datos iniciales
-import type { Exercise, Challenge, User, SavedRoutine } from "./Types"; // Tipos globales
+import { exerciseDatabase } from "./data/Exercises";
+//import * as api from "./service/api";
+import type { Exercise, Challenge, User, SavedRoutine } from "./Types";
 import "./App.css";
-
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userName, setUserName] = useState("Guerrero");
   const [currentView, setCurrentView] = useState<
     "routines" | "workout" | "olimpo" | "profile" | "admin"
   >("routines");
-
-  const [workoutCount, setWorkoutCount] = useState(0);
-  const [challengesWon, setChallengesWon] = useState(0);
-  const [totalVolumeGlobal, setTotalVolumeGlobal] = useState(0);
-  const [isWorkoutStarted, setIsWorkoutStarted] = useState(false);
 
   const [globalExercises, setGlobalExercises] =
     useState<Exercise[]>(exerciseDatabase);
@@ -52,6 +47,8 @@ function App() {
       email: "admin@buggys.com",
       role: "Super Admin",
       status: "Activo",
+      age: 30,
+      weight: 80,
     },
     {
       id: 2,
@@ -59,14 +56,49 @@ function App() {
       email: "andres@correo.com",
       role: "Guerrero",
       status: "Activo",
+      age: 25,
+      weight: 75,
     },
   ]);
-
-  const [activeRoutine, setActiveRoutine] = useState<Exercise[]>([]);
   const [savedRoutines, setSavedRoutines] = useState<SavedRoutine[]>([]);
+
+  const [loading, setLoading] = useState(false); //
+  const [workoutCount, setWorkoutCount] = useState(0);
+  const [challengesWon, setChallengesWon] = useState(0);
+  const [totalVolumeGlobal, setTotalVolumeGlobal] = useState(0);
+  const [isWorkoutStarted, setIsWorkoutStarted] = useState(false);
+  const [activeRoutine, setActiveRoutine] = useState<Exercise[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isSavingRoutine, setIsSavingRoutine] = useState(false);
   const [newRoutineName, setNewRoutineName] = useState("");
+
+  // ==========================================
+  // CONEXIÓN AL BACKEND
+  // ==========================================
+  /* useEffect(() => {
+    const loadOlimpoData = async () => {
+      try {
+        setLoading(true);
+        const [exData, chData, userData, routData] = await Promise.all([
+          api.getExercises(),
+          api.getChallenges(),
+          api.getUsers(),
+          api.getRoutines()
+        ]);
+        setGlobalExercises(exData);
+        setChallenges(chData);
+        setUsers(userData);
+        setSavedRoutines(routData);
+      } catch (error) {
+        console.error("Error conectando al servidor:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (isLoggedIn) { loadOlimpoData(); }
+  }, [isLoggedIn]); 
+  */
 
   const handleStartPredefinedRoutine = (type: "pierna" | "torso") => {
     let selectedExercises: Exercise[] = [];
@@ -98,29 +130,88 @@ function App() {
     setCurrentView("workout");
   };
 
-  const handleFinishWorkout = () => {
+  const handleFinishWorkout = async () => {
     const sessionVolume = activeRoutine.reduce(
       (sum, ex) => sum + (ex.volume || 0),
       0,
     );
-    setTotalVolumeGlobal((prev) => prev + sessionVolume);
-    setWorkoutCount((prev) => prev + 1);
-    setIsWorkoutStarted(false);
-    setActiveRoutine([]);
-    setCurrentView("profile");
+
+    const workoutData = {
+      userId: 2,
+      date: new Date().toISOString(),
+      totalVolume: sessionVolume,
+      exercisesCount: activeRoutine.length,
+      exercises: activeRoutine,
+    };
+
+    try {
+      // 1. Intentamos guardar en el Back
+      // await api.createWorkout(workoutData);
+
+      // 2. Actualizamos el estado local (lo que ya tenías)
+      setTotalVolumeGlobal((prev) => prev + sessionVolume);
+      setWorkoutCount((prev) => prev + 1);
+      setIsWorkoutStarted(false);
+      setActiveRoutine([]);
+      setCurrentView("profile");
+
+      alert("¡ENTRENAMIENTO REGISTRADO EN EL OLIMPO!");
+    } catch (error) {
+      console.error("Error al registrar la sesión:", error);
+    }
   };
 
-  const handleSaveRoutine = () => {
+  const handleSaveRoutine = async () => {
     if (newRoutineName.trim() === "") return;
+
     const newRoutine: SavedRoutine = {
       id: Date.now().toString(),
       name: newRoutineName.toUpperCase(),
       exercises: [...activeRoutine],
     };
+
     setSavedRoutines([...savedRoutines, newRoutine]);
+
+    // Lógica de Backend (Descomentar cuando el server esté listo)
+    /*
+    try {
+       const savedInBack = await api.createRoutine(newRoutine);
+       setSavedRoutines([...savedRoutines, savedInBack]);
+    } catch(e) { console.error(e); }
+    */
+
     setIsSavingRoutine(false);
     setNewRoutineName("");
     alert(`¡Rutina "${newRoutine.name}" guardada!`);
+  };
+  const handleRegister = async (data: {
+    name: string;
+    email: string;
+    age: number;
+    weight: number;
+    sex: string;
+  }) => {
+    const newUser: User = {
+      id: Date.now(),
+      name: data.name,
+      email: data.email,
+      role: "Guerrero",
+      status: "Activo",
+      age: data.age,
+      weight: data.weight,
+    };
+
+    setUsers([...users, newUser]);
+    setUserName(data.name);
+    setIsLoggedIn(true);
+    setCurrentView("routines");
+
+    // CONEXIÓN BACKEND (Comentada para el futuro)
+    /*
+  try {
+    await api.createUser(newUser);
+  } catch(e) { console.error("Error al persistir en DB"); }
+  */
   };
 
   if (!isLoggedIn) {
@@ -131,10 +222,18 @@ function App() {
           setIsLoggedIn(true);
           setCurrentView("routines");
         }}
+        onRegister={handleRegister}
       />
     );
   }
 
+  if (loading) {
+    return (
+      <div className="bg-black min-vh-100 d-flex align-items-center justify-content-center text-danger">
+        <h1>CARGANDO...</h1>
+      </div>
+    );
+  }
   return (
     <>
       <NavBar
@@ -198,10 +297,10 @@ function App() {
                     className="text-white fw-bold"
                     style={{ fontFamily: "'Anton', sans-serif" }}
                   >
-                    DÍA DE PIERNA
+                    TREN INFERIOR
                   </h2>
                   <button
-                    className="btn btn-danger w-100 mt-3 fw-bold shadow"
+                    className="btn btn-outline-danger w-100 mt-3 fw-bold shadow"
                     onClick={() => handleStartPredefinedRoutine("pierna")}
                   >
                     INICIAR MASACRE
@@ -209,7 +308,6 @@ function App() {
                 </div>
               </div>
             </div>
-
             <div className="col-md-5 mb-4">
               <div
                 className="card bg-black border-secondary h-100 shadow-lg"
@@ -220,7 +318,7 @@ function App() {
                     className="text-white fw-bold"
                     style={{ fontFamily: "'Anton', sans-serif" }}
                   >
-                    TORSO SUPERIOR
+                    TREN SUPERIOR
                   </h2>
                   <button
                     className="btn btn-outline-info w-100 mt-3 fw-bold shadow"
@@ -230,6 +328,14 @@ function App() {
                   </button>
                 </div>
               </div>
+            </div>
+            <div className="card-body text-center py-5">
+              <h2
+                className="text-white fw-bold"
+                style={{ fontFamily: "'Anton', sans-serif" }}
+              >
+                ⚔️ TUS CREACIONES ⚔️
+              </h2>
             </div>
 
             {/* SECCIÓN DE RUTINAS GUARDADAS */}
@@ -256,7 +362,6 @@ function App() {
                 </div>
               </div>
             ))}
-
             <div className="col-md-10 mt-2 text-center">
               <button
                 className="btn btn-outline-light btn-lg fw-bold shadow px-5"
@@ -280,7 +385,7 @@ function App() {
               className="display-5 fw-bold text-white m-0"
               style={{ fontFamily: "'Anton', sans-serif" }}
             >
-              {isWorkoutStarted ? "SESIÓN EN CURSO" : "PREPARAR CURSO"}
+              {isWorkoutStarted ? "ENTRENAMIENTO EN CURSO" : "PREPARAR CURSO"}
             </h2>
             <div className="d-flex gap-2">
               <button
@@ -371,27 +476,46 @@ function App() {
           )}
 
           <div className="row justify-content-center">
-            {activeRoutine.map((exercise) => (
-              <div key={exercise.id} className="col-12 col-lg-8 mb-4">
-                <ExerciseCard
-                  name={exercise.name}
-                  muscle={exercise.muscle}
-                  imageUrl={exercise.imageUrl}
-                  onRemove={() =>
-                    setActiveRoutine(
-                      activeRoutine.filter((e) => e.id !== exercise.id),
-                    )
-                  }
-                  onUpdateVolume={(vol) => {
-                    setActiveRoutine((prev) =>
-                      prev.map((e) =>
-                        e.id === exercise.id ? { ...e, volume: vol } : e,
-                      ),
-                    );
-                  }}
-                />
+            {activeRoutine.length === 0 && !isSearching ? (
+              <div className="col-12 text-center text-secondary py-5 animate__animated animate__fadeIn">
+                <h1 className="display-1 opacity-25">Ø</h1>
+                <h4
+                  className="fw-bold"
+                  style={{ fontFamily: "'Anton', sans-serif" }}
+                >
+                  TU RUTINA ESTÁ VACÍA
+                </h4>
+                <p>Agrega un ejercicio para comenzar a sangrar.</p>
+                <button
+                  className="btn btn-danger mt-3 fw-bold shadow"
+                  onClick={() => setIsSearching(true)}
+                >
+                  + EXPLORAR EJERCICIOS
+                </button>
               </div>
-            ))}
+            ) : (
+              activeRoutine.map((exercise) => (
+                <div key={exercise.id} className="col-12 col-lg-8 mb-4">
+                  <ExerciseCard
+                    name={exercise.name}
+                    muscle={exercise.muscle}
+                    imageUrl={exercise.imageUrl}
+                    onRemove={() =>
+                      setActiveRoutine(
+                        activeRoutine.filter((e) => e.id !== exercise.id),
+                      )
+                    }
+                    onUpdateVolume={(vol) => {
+                      setActiveRoutine((prev) =>
+                        prev.map((e) =>
+                          e.id === exercise.id ? { ...e, volume: vol } : e,
+                        ),
+                      );
+                    }}
+                  />
+                </div>
+              ))
+            )}
           </div>
         </main>
       )}

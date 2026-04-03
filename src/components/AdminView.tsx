@@ -1,4 +1,6 @@
 import { useState } from "react";
+
+//import * as api from "../service/api";
 import type { Challenge, User, Exercise } from "../Types";
 
 interface AdminProps {
@@ -29,9 +31,9 @@ function AdminView({
   const [newExMuscle, setNewExMuscle] = useState("PECHO");
   const [newExImage, setNewExImage] = useState("");
 
-  const handleCreateExercise = (e: React.FormEvent) => {
+  const handleCreateExercise = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newExercise: Exercise = {
+    const newExData: Exercise = {
       id: Date.now().toString(),
       name: newExName.toUpperCase(),
       muscle: newExMuscle,
@@ -39,21 +41,22 @@ function AdminView({
         newExImage ||
         "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?q=80&w=200",
     };
-    setExercises([...exercises, newExercise]);
-    // Limpiamos los campos
+
+    setExercises([...exercises, newExData]);
+
+    // CONEXIÓN BACKEND
+    /*
+    try {
+      const savedEx = await api.createExercise(newExData);
+      setExercises([...exercises, savedEx]);
+    } catch (err) { console.error("Error al crear ejercicio en BD"); }
+    */
+
     setNewExName("");
     setNewExImage("");
   };
 
-  const saveUserUpdate = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (editingUser) {
-      setUsers(users.map((u) => (u.id === editingUser.id ? editingUser : u)));
-      setEditingUser(null);
-    }
-  };
-
-  const saveExerciseUpdate = (e: React.FormEvent) => {
+  const saveExerciseUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingExercise) {
       setExercises(
@@ -61,7 +64,60 @@ function AdminView({
           ex.id === editingExercise.id ? editingExercise : ex,
         ),
       );
+
+      // CONEXIÓN BACKEND
+      /*
+      try { await api.updateExercise(editingExercise.id, editingExercise); } catch (err) { console.error(err); }
+      */
+
       setEditingExercise(null);
+    }
+  };
+
+  const handleDeleteExercise = async (id: string) => {
+    if (window.confirm("¿Eliminar este ejercicio permanentemente?")) {
+      setExercises(exercises.filter((ex) => ex.id !== id));
+
+      // CONEXIÓN BACKEND
+      /*
+      try { await api.deleteExercise(id); } catch(e) { console.error(e); }
+      */
+    }
+  };
+
+  const saveUserUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editingUser) {
+      setUsers(users.map((u) => (u.id === editingUser.id ? editingUser : u)));
+
+      // CONEXIÓN BACKEND
+      /*
+      try { await api.updateUser(editingUser.id, editingUser); } catch (err) { console.error(err); }
+      */
+
+      setEditingUser(null);
+    }
+  };
+
+  const handleDeleteUser = async (id: number) => {
+    if (window.confirm("¿Expulsar a este guerrero del sistema?")) {
+      setUsers(users.filter((u) => u.id !== id));
+
+      // CONEXIÓN BACKEND
+      /*
+      try { await api.deleteUser(id); } catch(e) { console.error(e); }
+      */
+    }
+  };
+
+  const handleDeleteChallenge = async (id: number) => {
+    if (window.confirm("¿Borrar este reto del Olimpo?")) {
+      setChallenges(challenges.filter((ch) => ch.id !== id));
+
+      // CONEXIÓN BACKEND
+      /*
+      try { await api.deleteChallenge(id); } catch(e) { console.error(e); }
+      */
     }
   };
 
@@ -98,9 +154,7 @@ function AdminView({
         </button>
       </div>
 
-      {/* ==========================================
-          SECCIÓN DE USUARIOS
-      ========================================== */}
+      {/* SECCIÓN DE USUARIOS */}
       {activeTab === "usuarios" && (
         <div className="animate__animated animate__fadeIn">
           {editingUser && (
@@ -173,11 +227,10 @@ function AdminView({
                       >
                         EDITAR
                       </button>
+                      {/* FUNCIÓN CONECTADA */}
                       <button
                         className="btn btn-sm btn-outline-danger fw-bold"
-                        onClick={() =>
-                          setUsers(users.filter((user) => user.id !== u.id))
-                        }
+                        onClick={() => handleDeleteUser(u.id)}
                       >
                         BORRAR
                       </button>
@@ -190,12 +243,9 @@ function AdminView({
         </div>
       )}
 
-      {/* ==========================================
-          SECCIÓN DE EJERCICIOS (CREAR + TABLA)
-      ========================================== */}
+      {/* SECCIÓN DE EJERCICIOS */}
       {activeTab === "ejercicios" && (
         <div className="animate__animated animate__fadeIn">
-          {/* 1. FORMULARIO DINÁMICO (CREAR O EDITAR) */}
           <div
             className={`card ${editingExercise ? "border-info" : "border-danger"} bg-dark mb-4 shadow-lg`}
           >
@@ -207,7 +257,6 @@ function AdminView({
                   ? "ACTUALIZAR EJERCICIO"
                   : "AÑADIR NUEVO EJERCICIO AL CATÁLOGO"}
               </h5>
-
               <form
                 onSubmit={
                   editingExercise ? saveExerciseUpdate : handleCreateExercise
@@ -308,7 +357,6 @@ function AdminView({
             </div>
           </div>
 
-          {/* 2. TABLA DE GESTIÓN */}
           <div className="table-responsive bg-black border border-secondary shadow-lg">
             <table className="table table-dark table-hover align-middle text-center m-0">
               <thead className="text-secondary">
@@ -331,6 +379,7 @@ function AdminView({
                           objectFit: "cover",
                           borderRadius: "4px",
                         }}
+                        alt={ex.name}
                       />
                     </td>
                     <td className="text-white fw-bold">{ex.name}</td>
@@ -344,11 +393,10 @@ function AdminView({
                       >
                         EDITAR
                       </button>
+                      {/* FUNCIÓN CONECTADA */}
                       <button
                         className="btn btn-sm btn-outline-danger fw-bold"
-                        onClick={() =>
-                          setExercises(exercises.filter((e) => e.id !== ex.id))
-                        }
+                        onClick={() => handleDeleteExercise(ex.id)}
                       >
                         BORRAR
                       </button>
@@ -361,9 +409,7 @@ function AdminView({
         </div>
       )}
 
-      {/* ==========================================
-          SECCIÓN DE RETOS
-      ========================================== */}
+      {/* SECCIÓN DE RETOS */}
       {activeTab === "retos" && (
         <div className="card bg-black border-danger p-0 overflow-hidden animate__animated animate__fadeIn">
           <table className="table table-dark table-hover text-center m-0">
@@ -380,11 +426,10 @@ function AdminView({
                   <td className="text-warning fw-bold">{ch.creator}</td>
                   <td className="text-white small">{ch.description}</td>
                   <td>
+                    {/* FUNCIÓN CONECTADA */}
                     <button
                       className="btn btn-sm btn-danger fw-bold"
-                      onClick={() =>
-                        setChallenges(challenges.filter((c) => c.id !== ch.id))
-                      }
+                      onClick={() => handleDeleteChallenge(ch.id)}
                     >
                       ELIMINAR
                     </button>
