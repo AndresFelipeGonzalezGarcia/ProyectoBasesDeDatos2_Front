@@ -3,6 +3,59 @@ import mano from "../assets/mano.png";
 import torre from "../assets/torre.png";
 import copa from "../assets/copa.png";
 
+// ─── Design Tokens (Sincronizados) ─────────────────────────────────────────
+const T = {
+  bg: "#0a0a0a",
+  surface: "#111111",
+  elevated: "#181818",
+  border: "#222222",
+  red: "#e63946",
+  redDim: "#7f1d1d",
+  gold: "#c9a84c",
+  cyan: "#38bdf8",
+  text: "#f0ede8",
+  muted: "#5a5a5a",
+  font: "'Barlow Condensed', sans-serif",
+  serif: "'Playfair Display', serif",
+};
+
+// ─── Micro-componentes UI ──────────────────────────────────────────────────
+const Divider = ({ color = T.red }: { color?: string }) => (
+  <div
+    style={{
+      height: 1,
+      background: `linear-gradient(90deg, transparent, ${color}88, transparent)`,
+      margin: "0 auto",
+      width: "100%",
+    }}
+  />
+);
+
+const Tag = ({
+  children,
+  color = T.red,
+}: {
+  children: React.ReactNode;
+  color?: string;
+}) => (
+  <span
+    style={{
+      fontFamily: T.font,
+      fontSize: 11,
+      fontWeight: 700,
+      letterSpacing: 3,
+      textTransform: "uppercase",
+      color,
+      border: `1px solid ${color}44`,
+      padding: "4px 12px",
+      borderRadius: 2,
+      background: `${color}11`,
+    }}
+  >
+    {children}
+  </span>
+);
+
 interface ProfileProps {
   userName: string;
   totalWorkouts: number;
@@ -16,6 +69,7 @@ function ProfileView({
   challengesWon,
   totalVolumeKg,
 }: ProfileProps) {
+  // ─── LÓGICA INTACTA ───
   const stats = {
     totalWorkouts: totalWorkouts,
     totalVolumeKg: totalVolumeKg,
@@ -56,107 +110,269 @@ function ProfileView({
 
   return (
     <div className="container mt-4 mb-5 animate__animated animate__fadeIn">
-      {/* Encabezado del Perfil */}
-      <div className="text-center mb-5 border-bottom border-danger pb-4">
+      {/* ─── Encabezado del Perfil ─── */}
+      <div style={{ textAlign: "center", marginBottom: 56 }}>
         <div
-          className="d-inline-flex align-items-center justify-content-center bg-danger text-white rounded-circle mb-3 shadow-lg"
-          style={{ width: "100px", height: "100px", fontSize: "3rem" }}
+          style={{
+            width: 120,
+            height: 120,
+            margin: "0 auto 24px",
+            borderRadius: "50%",
+            background: `${T.red}15`,
+            border: `2px solid ${T.red}`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 56,
+            fontFamily: T.serif,
+            color: T.red,
+            boxShadow: `0 0 40px ${T.red}33`,
+            textShadow: `0 0 16px ${T.red}88`,
+          }}
         >
           {userName.charAt(0).toUpperCase()}
         </div>
+
         <h1
-          className="display-4 text-white fw-bold mb-0 text-uppercase"
-          style={{ fontFamily: "'Anton', sans-serif", letterSpacing: "2px" }}
+          style={{
+            fontFamily: T.serif,
+            fontSize: "clamp(40px, 6vw, 64px)",
+            fontWeight: 700,
+            color: T.text,
+            margin: "0 0 16px",
+            letterSpacing: -1,
+            lineHeight: 1,
+            textTransform: "uppercase",
+          }}
         >
           {userName}
         </h1>
-        <p className="text-warning fs-5 fw-bold mt-2 text-uppercase">
-          {stats.level}
-        </p>
+
+        <Tag color={totalWorkouts > 10 ? T.gold : T.red}>{stats.level}</Tag>
+
+        <div style={{ marginTop: 40 }}>
+          <Divider color={T.red} />
+        </div>
       </div>
 
       <div className="row">
-        {/* Columna de Estadísticas */}
-        <div className="col-md-5 mb-4">
+        {/* ─── Columna de Estadísticas ─── */}
+        <div className="col-md-5 mb-5 mb-md-0">
           <h3
-            className="text-white fw-bold mb-3"
-            style={{ fontFamily: "'Anton', sans-serif" }}
+            style={{
+              fontFamily: T.font,
+              fontSize: 20,
+              fontWeight: 700,
+              letterSpacing: 2,
+              color: T.text,
+              marginBottom: 24,
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+            }}
           >
-            ESTADÍSTICAS
+            ESTADÍSTICAS{" "}
+            <div style={{ flex: 1, height: 1, background: T.border }} />
           </h3>
 
-          <div className="card bg-black border-secondary mb-3 shadow">
-            <div className="card-body d-flex justify-content-between align-items-center">
-              <span className="text-secondary fw-bold">
-                RUTINAS COMPLETADAS
-              </span>
-              <span className="text-white fs-4 fw-bold">
-                {stats.totalWorkouts}
-              </span>
-            </div>
+          <div
+            style={{
+              background: T.surface,
+              border: `1px solid ${T.border}`,
+              borderLeft: `3px solid ${T.cyan}`,
+              borderRadius: 4,
+              padding: "24px",
+              marginBottom: 16,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              boxShadow: `0 8px 24px #00000066`,
+            }}
+          >
+            <span
+              style={{
+                fontFamily: T.font,
+                fontSize: 13,
+                letterSpacing: 2,
+                color: T.muted,
+                textTransform: "uppercase",
+                fontWeight: 700,
+              }}
+            >
+              RUTINAS COMPLETADAS
+            </span>
+            <span
+              style={{
+                fontFamily: T.font,
+                fontSize: 28,
+                fontWeight: 700,
+                color: T.cyan,
+              }}
+            >
+              {stats.totalWorkouts}
+            </span>
           </div>
 
-          <div className="card bg-black border-secondary mb-3 shadow">
-            <div className="card-body d-flex justify-content-between align-items-center">
-              <span className="text-secondary fw-bold">VOLUMEN TOTAL (KG)</span>
-              <span className="text-danger fs-4 fw-bold">
-                {stats.totalVolumeKg.toLocaleString()} kg
-              </span>
-            </div>
+          <div
+            style={{
+              background: T.surface,
+              border: `1px solid ${T.border}`,
+              borderLeft: `3px solid ${T.red}`,
+              borderRadius: 4,
+              padding: "24px",
+              marginBottom: 16,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              boxShadow: `0 8px 24px #00000066`,
+            }}
+          >
+            <span
+              style={{
+                fontFamily: T.font,
+                fontSize: 13,
+                letterSpacing: 2,
+                color: T.muted,
+                textTransform: "uppercase",
+                fontWeight: 700,
+              }}
+            >
+              VOLUMEN TOTAL
+            </span>
+            <span
+              style={{
+                fontFamily: T.font,
+                fontSize: 28,
+                fontWeight: 700,
+                color: T.red,
+              }}
+            >
+              {stats.totalVolumeKg.toLocaleString()}{" "}
+              <span style={{ fontSize: 14, color: T.muted }}>KG</span>
+            </span>
           </div>
 
-          <div className="card bg-black border-warning mb-3 shadow">
-            <div className="card-body d-flex justify-content-between align-items-center">
-              <span className="text-warning fw-bold">RETOS GANADOS</span>
-              <span className="text-white fs-4 fw-bold">
-                {stats.challengesWon}
-              </span>
-            </div>
+          <div
+            style={{
+              background: T.surface,
+              border: `1px solid ${T.border}`,
+              borderLeft: `3px solid ${T.gold}`,
+              borderRadius: 4,
+              padding: "24px",
+              marginBottom: 16,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              boxShadow: `0 8px 24px #00000066`,
+            }}
+          >
+            <span
+              style={{
+                fontFamily: T.font,
+                fontSize: 13,
+                letterSpacing: 2,
+                color: T.muted,
+                textTransform: "uppercase",
+                fontWeight: 700,
+              }}
+            >
+              RETOS GANADOS
+            </span>
+            <span
+              style={{
+                fontFamily: T.font,
+                fontSize: 28,
+                fontWeight: 700,
+                color: T.gold,
+              }}
+            >
+              {stats.challengesWon}
+            </span>
           </div>
         </div>
 
-        {/* Columna de Logros */}
+        {/* ─── Columna de Logros ─── */}
         <div className="col-md-7">
           <h3
-            className="text-white fw-bold mb-3"
-            style={{ fontFamily: "'Anton', sans-serif" }}
+            style={{
+              fontFamily: T.font,
+              fontSize: 20,
+              fontWeight: 700,
+              letterSpacing: 2,
+              color: T.text,
+              marginBottom: 24,
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+            }}
           >
-            MEDALLAS DE GUERRA
+            MEDALLAS DE GUERRA{" "}
+            <div style={{ flex: 1, height: 1, background: T.border }} />
           </h3>
 
-          <div className="row">
+          <div className="row gx-3 gy-3">
             {achievements.map((ach) => (
-              <div key={ach.id} className="col-sm-6 mb-3">
+              <div key={ach.id} className="col-sm-6">
                 <div
-                  className={`card h-100 bg-black border-${ach.unlocked ? "danger" : "secondary"} shadow-sm`}
-                  style={{ opacity: ach.unlocked ? 1 : 0.6 }}
+                  style={{
+                    height: "100%",
+                    background: T.surface,
+                    border: `1px solid ${ach.unlocked ? T.red : T.border}`,
+                    borderRadius: 4,
+                    padding: "32px 24px",
+                    textAlign: "center",
+                    opacity: ach.unlocked ? 1 : 0.4,
+                    filter: ach.unlocked ? "none" : "grayscale(100%)",
+                    transition: "all 0.3s",
+                    boxShadow: ach.unlocked ? `0 8px 32px ${T.red}15` : "none",
+                  }}
                 >
-                  <div className="card-body text-center">
-                    <div className="mb-2">
-                      {ach.image && (
-                        <img
-                          src={ach.image}
-                          alt={ach.name}
-                          style={{
-                            width: "60px",
-                            height: "60px",
-                            objectFit: "contain",
-                          }}
-                        />
-                      )}
-                    </div>
-                    <h5
-                      className={`fw-bold text-uppercase ${ach.unlocked ? "text-white" : "text-secondary"}`}
-                    >
-                      {ach.name}
-                    </h5>
-                    <p className="small text-light opacity-75 m-0">
-                      {ach.desc}
-                    </p>
-                    {ach.unlocked && (
-                      <span className="badge bg-danger mt-2">DESBLOQUEADO</span>
+                  <div style={{ marginBottom: 20 }}>
+                    {ach.image && (
+                      <img
+                        src={ach.image}
+                        alt={ach.name}
+                        style={{
+                          width: 64,
+                          height: 64,
+                          objectFit: "contain",
+                          filter: ach.unlocked
+                            ? "drop-shadow(0 0 12px rgba(230, 57, 70, 0.6))"
+                            : "none",
+                        }}
+                      />
                     )}
                   </div>
+                  <h5
+                    style={{
+                      fontFamily: T.font,
+                      fontSize: 16,
+                      fontWeight: 700,
+                      letterSpacing: 2,
+                      color: ach.unlocked ? T.text : T.muted,
+                      textTransform: "uppercase",
+                      marginBottom: 8,
+                    }}
+                  >
+                    {ach.name}
+                  </h5>
+                  <p
+                    style={{
+                      fontFamily: T.font,
+                      fontSize: 12,
+                      letterSpacing: 1,
+                      color: T.muted,
+                      marginBottom: ach.unlocked ? 24 : 0,
+                    }}
+                  >
+                    {ach.desc}
+                  </p>
+
+                  {ach.unlocked && (
+                    <div style={{ display: "inline-block" }}>
+                      <Tag color={T.red}>DESBLOQUEADO</Tag>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
