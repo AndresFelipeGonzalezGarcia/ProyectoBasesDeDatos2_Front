@@ -1,5 +1,13 @@
-import { useState } from "react";
-import type { Challenge } from "../Types";
+import { useState, useEffect } from "react";
+import type { Challenge, TipoRetoBackend, UsuarioBackend } from "../Types";
+import {
+  getTiposReto,
+  createReto,
+  joinReto,
+  updateRetoEstado,
+  declararGanador,
+} from "../service/api";
+import type { ToastType } from "./Toast";
 
 // ─── Design Tokens (Sincronizados) ─────────────────────────────────────────
 const T = {
@@ -115,69 +123,183 @@ const GlowBtn = ({
   );
 };
 
+// ─── Utilidad: calcular fechaLimite ────────────────────────────────────────
+function calcDeadline(option: string): string {
+  const now = new Date();
+  switch (option) {
+    case "HOY": {
+      now.setHours(23, 59, 59, 0);
+      break;
+    }
+    case "24H": {
+      now.setHours(now.getHours() + 24);
+      break;
+    }
+    case "3D": {
+      now.setDate(now.getDate() + 3);
+      break;
+    }
+    case "1S": {
+      now.setDate(now.getDate() + 7);
+      break;
+    }
+    default:
+      now.setHours(now.getHours() + 24);
+  }
+  // Formato LocalDateTime sin zona: "2024-01-15T23:59:59"
+  return now.toISOString().slice(0, 19);
+}
+
+// ─── Utilidad: formatear fecha límite para mostrar ─────────────────────────
+function formatDeadline(iso: string): string {
+  if (!iso) return "-";
+  try {
+    return new Date(iso).toLocaleString("es-CO", {
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
+
 // ─── Componente Principal ──────────────────────────────────────────────────
 interface OlimpoProps {
-  userName: string;
+  currentUser: UsuarioBackend;
   challenges: Challenge[];
-  setChallenges: (ch: Challenge[]) => void;
+  onReloadChallenges: () => Promise<void>;
   onWinChallenge: () => void;
+  showToast: (message: string, type?: ToastType) => void;
+  showConfirm: (message: string, onConfirm: () => void, opts?: { subMessage?: string; confirmLabel?: string; danger?: boolean }) => void;
 }
 
 function OlimpoView({
-  userName,
+  currentUser,
   challenges,
-  setChallenges,
+  onReloadChallenges,
   onWinChallenge,
+  showToast,
+  showConfirm,
 }: OlimpoProps) {
-  // LÓGICA INTACTA
+  const userName = currentUser.nombre;
+
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [newType, setNewType] = useState("FUERZA");
+  const [tiposReto, setTiposReto] = useState<TipoRetoBackend[]>([]);
+  const [selectedTipoReto, setSelectedTipoReto] = useState<number | "">("");
   const [newDescription, setNewDescription] = useState("");
   const [newBet, setNewBet] = useState("");
-  const [newDeadline, setNewDeadline] = useState("24 Horas");
+  const [newDeadline, setNewDeadline] = useState("24H");
+  const [actionError, setActionError] = useState("");
+  const [loadingAction, setLoadingAction] = useState(false);
 
-  const handleAcceptChallenge = (challengeId: number) => {
-    setChallenges(
-      challenges.map((ch) => {
-        if (ch.id === challengeId && !ch.participants?.includes(userName)) {
-          return {
-            ...ch,
-            participants: [...(ch.participants || []), userName],
-          };
+  // Cargar tipos de reto al montar
+  useEffect(() => {
+    getTiposReto()
+      .then((data) => {
+        const list = Array.isArray(data) ? data : [];
+        setTiposReto(list);
+        if (list.length > 0) setSelectedTipoReto(list[0].idTipoReto);
+      })
+      .catch(() => setTiposReto([]));
+  }, []);
+
+  // ─── Unirse a un reto ─────────────────────────────────────────────────────
+  const handleAcceptChallenge = async (challengeId: number) => {
+    setActionError("");
+    setLoadingAction(true);
+    try {
+      await joinReto(currentUser.idUsuario, challengeId);
+      await onReloadChallenges();
+    } catch (err: any) {
+      setActionError(err.message || "Error al unirse al reto.");
+    } finally {
+      setLoadingAction(false);
+    }
+  };
+
+  // ─── Reclamar victoria ────────────────────────────────────────────────────
+  const handleClaimVictory = async (challenge: Challenge) => {
+    setActionError("");
+    setLoadingAction(true);
+    try {
+      // Buscar el idRetoParticipante del usuario actual en este reto
+      const myParticipacion = challenge.participantes.find(
+        (p) => p.idUsuario === currentUser.idUsuario,
+      );
+      if (!myParticipacion) {
+        throw new Error("No estás registrado como participante en este reto.");
+      }
+      await declararGanador(myParticipacion.idRetoParticipante);
+      await updateRetoEstado(challenge.id, "FINALIZADO");
+      onWinChallenge();
+      await onReloadChallenges();
+      showToast("¡Victoria registrada! El reto ha sido cerrado.", "success");
+    } catch (err: any) {
+      setActionError(err.message || "Error al reclamar victoria.");
+    } finally {
+      setLoadingAction(false);
+    }
+  };
+
+  // ─── Cerrar reto por tiempo ───────────────────────────────────────────────
+  const handleTimeOut = (challengeId: number) => {
+    showConfirm(
+      "¿Cerrar este reto por tiempo agotado?",
+      async () => {
+        setActionError("");
+        setLoadingAction(true);
+        try {
+          await updateRetoEstado(challengeId, "FINALIZADO");
+          await onReloadChallenges();
+          showToast("Reto cerrado por tiempo agotado.", "info");
+        } catch (err: any) {
+          setActionError(err.message || "Error al cerrar el reto.");
+        } finally {
+          setLoadingAction(false);
         }
-        return ch;
-      }),
+      },
+      { subMessage: "El reto quedará como FINALIZADO.", confirmLabel: "Cerrar reto", danger: false }
     );
   };
 
-  const handleClaimVictory = (challengeId: number) => {
-    onWinChallenge();
-    const updatedChallenges = challenges.filter((ch) => ch.id !== challengeId);
-    setChallenges(updatedChallenges);
-    alert("¡VICTORIA REGISTRADA! El reto ha sido retirado de la arena.");
-  };
-
-  const handleTimeOut = (challengeId: number) => {
-    const updatedChallenges = challenges.filter((ch) => ch.id !== challengeId);
-    setChallenges(updatedChallenges);
-  };
-
-  const handleCreateChallenge = (e: React.FormEvent) => {
+  // ─── Crear nuevo reto ─────────────────────────────────────────────────────
+  const handleCreateChallenge = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newChallenge: Challenge = {
-      id: Date.now(),
-      creator: userName,
-      type: newType,
-      description: newDescription,
-      bet: newBet,
-      status: "Abierto",
-      deadline: newDeadline,
-      participants: [userName],
-    };
-    setChallenges([newChallenge, ...challenges]);
-    setNewDescription("");
-    setNewBet("");
-    setShowCreateForm(false);
+    if (!selectedTipoReto) {
+      setActionError("Selecciona un tipo de reto.");
+      return;
+    }
+    setActionError("");
+    setLoadingAction(true);
+    let idRetoCreado: number | null = null;
+    try {
+      const res = await createReto({
+        idUsuario: currentUser.idUsuario,
+        idTipoReto: Number(selectedTipoReto),
+        descripcion: newDescription,
+        apuesta: newBet,
+        estado: "PENDIENTE",
+        fechaLimite: calcDeadline(newDeadline),
+      });
+
+      if (!res?.idReto) throw new Error("El servidor no devolvió el ID del reto.");
+      idRetoCreado = res.idReto;
+
+      // El creador se une automáticamente
+      await joinReto(currentUser.idUsuario, idRetoCreado);
+      idRetoCreado = null; // éxito, no hay rollback
+
+      await onReloadChallenges();
+      setNewDescription("");
+      setNewBet("");
+      setShowCreateForm(false);
+    } catch (err: any) {
+      setActionError(err.message || "Error al crear el reto.");
+    } finally {
+      setLoadingAction(false);
+    }
   };
 
   return (
@@ -232,6 +354,26 @@ function OlimpoView({
         </div>
       </div>
 
+      {/* ─── Error global de acción ────────────────────────────────────── */}
+      {actionError && (
+        <div
+          className="mb-3"
+          style={{
+            background: `${T.red}18`,
+            border: `1px solid ${T.red}55`,
+            borderRadius: 4,
+            padding: "12px 20px",
+            fontFamily: T.font,
+            fontSize: 13,
+            color: T.red,
+            letterSpacing: 1,
+            textAlign: "center",
+          }}
+        >
+          {actionError}
+        </div>
+      )}
+
       <div className="row justify-content-center">
         <div className="col-12 col-lg-8">
           {!showCreateForm ? (
@@ -250,7 +392,10 @@ function OlimpoView({
                 >
                   RETOS EN JUEGO
                 </h3>
-                <GlowBtn variant="red" onClick={() => setShowCreateForm(true)}>
+                <GlowBtn
+                  variant="red"
+                  onClick={() => { setShowCreateForm(true); setActionError(""); }}
+                >
                   + FORJAR RETO
                 </GlowBtn>
               </div>
@@ -295,9 +440,10 @@ function OlimpoView({
                 </div>
               ) : (
                 challenges.map((challenge) => {
-                  const isUserParticipating =
-                    challenge.participants?.includes(userName);
-                  const isCreator = challenge.creator === userName;
+                  const isUserParticipating = challenge.participantes.some(
+                    (p) => p.idUsuario === currentUser.idUsuario,
+                  );
+                  const isCreator = challenge.idCreador === currentUser.idUsuario;
                   const accent = isUserParticipating ? T.red : T.gold;
 
                   return (
@@ -339,7 +485,9 @@ function OlimpoView({
                         <div className="d-flex justify-content-between align-items-start mb-3">
                           <div className="d-flex gap-2">
                             <Tag color={T.muted}>{challenge.type}</Tag>
-                            <Tag color={T.gold}>⏳ {challenge.deadline}</Tag>
+                            <Tag color={T.gold}>
+                              ⏳ {formatDeadline(challenge.deadline)}
+                            </Tag>
                           </div>
                           <div
                             style={{
@@ -426,16 +574,19 @@ function OlimpoView({
                                 fontFamily: T.font,
                                 fontSize: 14,
                                 fontWeight: 700,
-                                color: T.gold,
+                                color: challenge.status === "PENDIENTE" ? T.gold : T.cyan,
                                 textTransform: "uppercase",
                                 letterSpacing: 2,
                               }}
                             >
-                              EN COMBATE
+                              {challenge.status === "PENDIENTE"
+                                ? "PENDIENTE"
+                                : "EN COMBATE"}
                             </span>
                           </div>
                         </div>
 
+                        {/* Guerreros */}
                         <div className="mb-4">
                           <span
                             style={{
@@ -448,28 +599,30 @@ function OlimpoView({
                               marginBottom: 8,
                             }}
                           >
-                            GUERREROS ({challenge.participants?.length || 0}):
+                            GUERREROS ({challenge.participantes.length}):
                           </span>
                           <div className="d-flex flex-wrap gap-2">
-                            {challenge.participants?.map((p, index) => (
-                              <span
-                                key={index}
-                                style={{
-                                  fontFamily: T.font,
-                                  fontSize: 11,
-                                  fontWeight: 700,
-                                  letterSpacing: 1,
-                                  padding: "4px 12px",
-                                  borderRadius: 2,
-                                  background:
-                                    p === userName ? `${T.red}22` : T.elevated,
-                                  color: p === userName ? T.red : T.muted,
-                                  border: `1px solid ${p === userName ? T.red : T.border}`,
-                                }}
-                              >
-                                {p === userName ? "TÚ" : p}
-                              </span>
-                            ))}
+                            {challenge.participantes.map((p) => {
+                              const esYo = p.idUsuario === currentUser.idUsuario;
+                              return (
+                                <span
+                                  key={p.idRetoParticipante}
+                                  style={{
+                                    fontFamily: T.font,
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    letterSpacing: 1,
+                                    padding: "4px 12px",
+                                    borderRadius: 2,
+                                    background: esYo ? `${T.red}22` : T.elevated,
+                                    color: esYo ? T.red : T.muted,
+                                    border: `1px solid ${esYo ? T.red : T.border}`,
+                                  }}
+                                >
+                                  {esYo ? "TÚ" : p.nombreUsuario}
+                                </span>
+                              );
+                            })}
                           </div>
                         </div>
 
@@ -479,7 +632,8 @@ function OlimpoView({
                             <GlowBtn
                               variant="cyan"
                               size="lg"
-                              onClick={() => handleClaimVictory(challenge.id)}
+                              disabled={loadingAction}
+                              onClick={() => handleClaimVictory(challenge)}
                             >
                               ✓ RECLAMAR VICTORIA
                             </GlowBtn>
@@ -487,9 +641,8 @@ function OlimpoView({
                             <GlowBtn
                               variant="gold"
                               size="lg"
-                              onClick={() =>
-                                handleAcceptChallenge(challenge.id)
-                              }
+                              disabled={loadingAction}
+                              onClick={() => handleAcceptChallenge(challenge.id)}
                             >
                               ⚔️ ENTRAR A LA ARENA
                             </GlowBtn>
@@ -498,6 +651,7 @@ function OlimpoView({
                             <GlowBtn
                               variant="ghost"
                               size="sm"
+                              disabled={loadingAction}
                               onClick={() => handleTimeOut(challenge.id)}
                               style={{ marginTop: 8 }}
                             >
@@ -546,7 +700,7 @@ function OlimpoView({
                 <GlowBtn
                   variant="ghost"
                   size="sm"
-                  onClick={() => setShowCreateForm(false)}
+                  onClick={() => { setShowCreateForm(false); setActionError(""); }}
                 >
                   ✕ CANCELAR
                 </GlowBtn>
@@ -558,12 +712,19 @@ function OlimpoView({
                     <label className="buggy-label">DISCIPLINA</label>
                     <select
                       className="buggy-input"
-                      value={newType}
-                      onChange={(e) => setNewType(e.target.value)}
+                      value={selectedTipoReto}
+                      onChange={(e) => setSelectedTipoReto(Number(e.target.value))}
+                      required
                     >
-                      <option value="FUERZA">FUERZA BRUTA</option>
-                      <option value="RESISTENCIA">RESISTENCIA</option>
-                      <option value="VOLUMEN">VOLUMEN</option>
+                      {tiposReto.length === 0 ? (
+                        <option value="">Cargando tipos…</option>
+                      ) : (
+                        tiposReto.map((t) => (
+                          <option key={t.idTipoReto} value={t.idTipoReto}>
+                            {t.nombre.toUpperCase()}
+                          </option>
+                        ))
+                      )}
                     </select>
                   </div>
                   <div className="col-md-6">
@@ -574,8 +735,9 @@ function OlimpoView({
                       onChange={(e) => setNewDeadline(e.target.value)}
                     >
                       <option value="HOY">HOY MISMO</option>
-                      <option value="24 Horas">24 HORAS</option>
-                      <option value="3 Días">3 DÍAS</option>
+                      <option value="24H">24 HORAS</option>
+                      <option value="3D">3 DÍAS</option>
+                      <option value="1S">1 SEMANA</option>
                     </select>
                   </div>
                 </div>
@@ -610,13 +772,29 @@ function OlimpoView({
                   />
                 </div>
 
+                {actionError && (
+                  <p
+                    style={{
+                      fontFamily: T.font,
+                      fontSize: 12,
+                      color: T.red,
+                      letterSpacing: 1,
+                      marginBottom: 16,
+                      textAlign: "center",
+                    }}
+                  >
+                    {actionError}
+                  </p>
+                )}
+
                 <GlowBtn
                   variant="red"
                   size="lg"
                   style={{ width: "100%" }}
                   type="submit"
+                  disabled={loadingAction || tiposReto.length === 0}
                 >
-                  🔥 LANZAR A LA ARENA
+                  {loadingAction ? "ENVIANDO…" : "🔥 LANZAR A LA ARENA"}
                 </GlowBtn>
               </form>
             </div>

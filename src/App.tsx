@@ -1,13 +1,35 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import NavBar from "./components/NavBar";
 import ExerciseCard from "./components/ExerciseCard";
 import LoadingView from "./components/LoadingView";
 import OlimpoView from "./components/OlimpoView";
 import ProfileView from "./components/ProfileView";
 import AdminView from "./components/AdminView";
+import HistorialView from "./components/HistorialView";
+import Toast, { type ToastType } from "./components/Toast";
+import ConfirmModal from "./components/ConfirmModal";
 import { exerciseDatabase } from "./data/Exercises";
-//import * as api from "./service/api";
-import type { Exercise, Challenge, User, SavedRoutine } from "./Types";
+import type {
+  Exercise, Challenge, SavedRoutine, UsuarioBackend,
+  LogroBackend, UsuarioLogroBackend, WorkoutSet, HistorialBackend,
+} from "./Types";
+import {
+  getEjercicios,
+  getRutinasByUsuario,
+  getRutinaEjercicios,
+  createRutina,
+  addEjerciciosBatch,
+  deleteRutina,
+  getAllRetos,
+  getAllParticipantes,
+  getParticipantesByUsuario,
+  getAllLogros,
+  getLogrosUsuario,
+  asignarLogro,
+  getLogrosByRutina,
+  getHistorialByUsuario,
+  createHistorial,
+} from "./service/api";
 import "./App.css";
 
 // ─── Inline design tokens ────────────────────────────────────────────────────
@@ -215,60 +237,39 @@ const RoutineCard = ({
   </div>
 );
 
+// ─── Helpers de sesión ────────────────────────────────────────────────────────
+const SESSION_KEY = "buggyfit_session";
+
+const getStoredUser = (): UsuarioBackend | null => {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    return raw ? (JSON.parse(raw) as UsuarioBackend) : null;
+  } catch {
+    return null;
+  }
+};
+
 // ─── Main App ─────────────────────────────────────────────────────────────────
 
 function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [userName, setUserName] = useState("Guerrero");
+  // Inicializar directamente desde localStorage — sin spinner, sin delay
+  const [isLoggedIn, setIsLoggedIn] = useState(() => !!getStoredUser());
+  const [currentUser, setCurrentUser] = useState<UsuarioBackend | null>(() => getStoredUser());
+  const [userName, setUserName] = useState(() => getStoredUser()?.nombre ?? "Guerrero");
   const [currentView, setCurrentView] = useState<
-    "routines" | "workout" | "olimpo" | "profile" | "admin"
+    "routines" | "workout" | "olimpo" | "profile" | "admin" | "historial"
   >("routines");
 
   const [globalExercises, setGlobalExercises] =
     useState<Exercise[]>(exerciseDatabase);
-  const [challenges, setChallenges] = useState<Challenge[]>([
-    {
-      id: 1,
-      creator: "El_Tanque",
-      type: "FUERZA",
-      description: "Llegar a 140kg en Sentadilla Libre",
-      bet: "Pagar la mensualidad del mes",
-      status: "Abierto",
-      deadline: "24 Horas",
-      participants: ["El_Tanque", "Ragnar_99"],
-    },
-    {
-      id: 2,
-      creator: "Valkiria",
-      type: "RESISTENCIA",
-      description: "100 Dominadas estrictas sin bajar de la barra",
-      bet: "Un tarro de Creatina",
-      status: "Abierto",
-      deadline: "Hoy mismo",
-      participants: ["Valkiria", "Andrés"],
-    },
-  ]);
-  const [users, setUsers] = useState<User[]>([
-    {
-      id: 1,
-      name: "ADMIN",
-      email: "admin@buggys.com",
-      role: "Super Admin",
-      status: "Activo",
-      age: 30,
-      weight: 80,
-    },
-    {
-      id: 2,
-      name: "Andrés",
-      email: "andres@correo.com",
-      role: "Guerrero",
-      status: "Activo",
-      age: 25,
-      weight: 75,
-    },
-  ]);
+  const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [savedRoutines, setSavedRoutines] = useState<SavedRoutine[]>([]);
+  const [logros, setLogros] = useState<LogroBackend[]>([]);
+  const [logrosUsuario, setLogrosUsuario] = useState<UsuarioLogroBackend[]>([]);
+  const [currentSavedRoutineId, setCurrentSavedRoutineId] = useState<number | null>(null);
+  const [historial, setHistorial] = useState<HistorialBackend[]>([]);
+  // exerciseSets: mapa exerciseId → sets registradas en la sesión activa
+  const [exerciseSets, setExerciseSets] = useState<Record<string, WorkoutSet[]>>({});
 
   const [loading, setLoading] = useState(false);
   const [workoutCount, setWorkoutCount] = useState(0);
@@ -279,8 +280,269 @@ function App() {
   const [isSearching, setIsSearching] = useState(false);
   const [isSavingRoutine, setIsSavingRoutine] = useState(false);
   const [newRoutineName, setNewRoutineName] = useState("");
+  const [saveRoutineError, setSaveRoutineError] = useState("");
+  const [isSavingToServer, setIsSavingToServer] = useState(false);
 
-  // ── handlers (sin cambios) ───────────────────────────────────────────────
+  // ── Toast & Confirm ─────────────────────────────────────────────────────
+  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{
+    message: string;
+    subMessage?: string;
+    confirmLabel?: string;
+    onConfirm: () => void;
+    danger?: boolean;
+  } | null>(null);
+
+  const showToast = useCallback((message: string, type: ToastType = "info") => {
+    setToast({ message, type });
+  }, []);
+
+  const showConfirm = useCallback((
+    message: string,
+    onConfirm: () => void,
+    opts?: { subMessage?: string; confirmLabel?: string; danger?: boolean }
+  ) => {
+    setConfirmModal({ message, onConfirm, ...opts });
+  }, []);
+
+  // ── Restaurar sesión al recargar ─────────────────────────────────────────
+  useEffect(() => {
+    const stored = getStoredUser();
+    if (!stored) return;
+
+    // Sesión detectada — cargar todos los datos del usuario en background
+    (async () => {
+      try {
+        const [ejerciciosData] = await Promise.all([
+          getEjercicios().catch(() => [] as any[]),
+        ]);
+
+        let exerciseList: Exercise[] = globalExercises;
+        if (Array.isArray(ejerciciosData) && ejerciciosData.length > 0) {
+          exerciseList = ejerciciosData.map((e: any) => ({
+            id: String(e.idEjercicio),
+            name: e.nombre,
+            muscle: e.musculo,
+            imageUrl:
+              e.imagen ||
+              "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?q=80&w=200",
+          }));
+          setGlobalExercises(exerciseList);
+        }
+
+        await Promise.all([
+          loadUserRoutines(stored.idUsuario, exerciseList),
+          loadChallenges(),
+          loadLogros(stored.idUsuario),
+          loadUserStats(stored.idUsuario),
+          loadHistorial(stored.idUsuario),
+        ]);
+      } catch {
+        // Si el backend no responde, el usuario sigue logueado con datos vacíos
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Cargar ejercicios del backend al montar ──────────────────────────────
+  useEffect(() => {
+    getEjercicios()
+      .then((data) => {
+        if (data && Array.isArray(data) && data.length > 0) {
+          setGlobalExercises(
+            data.map((e) => ({
+              id: String(e.idEjercicio),
+              name: e.nombre,
+              muscle: e.musculo,
+              imageUrl:
+                e.imagen ||
+                "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?q=80&w=200",
+            })),
+          );
+        }
+      })
+      .catch(() => {}); // fallback: usa exerciseDatabase
+  }, []);
+
+
+  // ── Cargar estadísticas del usuario desde el backend ─────────────────────
+  const loadUserStats = async (idUsuario: number) => {
+    try {
+      const participaciones = await getParticipantesByUsuario(idUsuario).catch(() => []);
+      const lista = Array.isArray(participaciones) ? participaciones : [];
+      const ganados = lista.filter((p) => p.esGanador).length;
+      setChallengesWon(ganados);
+    } catch {
+      // Si falla, queda en 0
+    }
+  };
+
+  // ── Cargar rutinas del usuario ────────────────────────────────────────────
+  const loadUserRoutines = async (idUsuario: number, exerciseList: Exercise[]) => {
+    try {
+      const rutinas = await getRutinasByUsuario(idUsuario);
+      if (!Array.isArray(rutinas) || rutinas.length === 0) {
+        setSavedRoutines([]);
+        setWorkoutCount(0);
+        return;
+      }
+      // El número de rutinas guardadas representa las sesiones completadas
+      setWorkoutCount(rutinas.length);
+      const routinesWithExercises = await Promise.all(
+        rutinas.map(async (r) => {
+          try {
+            const items = await getRutinaEjercicios(r.idRutina);
+            const exercises: Exercise[] = Array.isArray(items)
+              ? items
+                  .sort((a, b) => a.orden - b.orden)
+                  .map((item) =>
+                    exerciseList.find((ex) => ex.id === String(item.idEjercicio)),
+                  )
+                  .filter((ex): ex is Exercise => ex !== undefined)
+              : [];
+            return { id: String(r.idRutina), name: r.nombre, exercises };
+          } catch {
+            return { id: String(r.idRutina), name: r.nombre, exercises: [] };
+          }
+        }),
+      );
+      setSavedRoutines(routinesWithExercises);
+    } catch {
+      setSavedRoutines([]);
+    }
+  };
+
+  // ── Cargar retos del backend ──────────────────────────────────────────────
+  const loadChallenges = async () => {
+    try {
+      const [retos, participantes] = await Promise.all([
+        getAllRetos().catch(() => []),
+        getAllParticipantes().catch(() => []),
+      ]);
+
+      const retosArray = Array.isArray(retos) ? retos : [];
+      const partArray = Array.isArray(participantes) ? participantes : [];
+
+      const mapped: Challenge[] = retosArray
+        .filter((r) => r.estado !== "FINALIZADO")
+        .map((r) => ({
+          id: r.idReto,
+          creator: r.nombreUsuario,
+          idCreador: r.idUsuario,
+          type: r.nombreTipoReto,
+          idTipoReto: r.idTipoReto,
+          description: r.descripcion,
+          bet: r.apuesta,
+          status: r.estado,
+          deadline: r.fechaLimite,
+          participantes: partArray.filter((p) => p.idReto === r.idReto),
+        }));
+
+      setChallenges(mapped);
+    } catch {
+      setChallenges([]);
+    }
+  };
+
+  // ── Cargar logros del backend ─────────────────────────────────────────────
+  const loadLogros = async (idUsuario: number) => {
+    try {
+      const [catalogo, desbloqueados] = await Promise.all([
+        getAllLogros().catch(() => []),
+        getLogrosUsuario(idUsuario).catch(() => []),
+      ]);
+      setLogros(Array.isArray(catalogo) ? catalogo : []);
+      setLogrosUsuario(Array.isArray(desbloqueados) ? desbloqueados : []);
+    } catch {
+      setLogros([]);
+      setLogrosUsuario([]);
+    }
+  };
+
+  // ── Cargar historial desde MongoDB ───────────────────────────────────────
+  const loadHistorial = async (idUsuario: number) => {
+    try {
+      const data = await getHistorialByUsuario(idUsuario).catch(() => []);
+      const lista = Array.isArray(data) ? data : [];
+      setHistorial(lista);
+      // Calcular volumen acumulado real desde el historial
+      const volumenTotal = lista.reduce((sum, h) => sum + (h.volumenTotalKG || 0), 0);
+      setTotalVolumeGlobal(volumenTotal);
+    } catch {
+      setHistorial([]);
+    }
+  };
+
+  // ── Otorgar logros vinculados a una rutina específica (logro_rutina) ────────
+  const checkAndAwardLogros = async (idRutina: number, idUsuario: number) => {
+    try {
+      const vinculados = await getLogrosByRutina(idRutina).catch(() => []);
+      if (!Array.isArray(vinculados) || vinculados.length === 0) return;
+      await Promise.all(
+        vinculados.map((lr) => asignarLogro(idUsuario, lr.idLogro).catch(() => {})),
+      );
+      await loadLogros(idUsuario);
+    } catch { /* silencioso */ }
+  };
+
+  // ── Evaluar logros por estadísticas (sesiones, volumen, retos) ────────────
+  // Compara la descripción del logro con las stats actuales para saber si aplica.
+  const logroAplica = (
+    logro: LogroBackend,
+    stats: { sesiones: number; volumenKG: number; retosGanados: number },
+  ): boolean => {
+    const desc = (logro.descripcion ?? "").toLowerCase();
+
+    // ── Primer entrenamiento / primera sesión ─────────────────────────────
+    if (/primer\s+entrenamiento|primera?\s+sesi[oó]n/i.test(desc)) {
+      return stats.sesiones >= 1;
+    }
+
+    // ── N entrenamientos completados (ej: "10 entrenamientos") ───────────
+    const mSesiones = desc.match(/(\d+)\s+entrenamiento/);
+    if (mSesiones) return stats.sesiones >= Number(mSesiones[1]);
+
+    // ── Volumen en kg (ej: "10,000 kg" o "10000 kg") ─────────────────────
+    const mVol = desc.match(/([\d][0-9.,]*)\s*kg/i);
+    if (mVol) {
+      const threshold = Number(mVol[1].replace(/[.,]/g, ""));
+      if (!isNaN(threshold) && threshold > 0) return stats.volumenKG >= threshold;
+    }
+
+    // ── N retos ganados (ej: "5 retos") ──────────────────────────────────
+    const mRetos = desc.match(/(\d+)\s+reto/);
+    if (mRetos) return stats.retosGanados >= Number(mRetos[1]);
+
+    return false;
+  };
+
+  const evaluarLogros = async (
+    idUsuario: number,
+    stats: { sesiones: number; volumenKG: number; retosGanados: number },
+    catalogoActual?: LogroBackend[],
+    desbloqueadosActual?: UsuarioLogroBackend[],
+  ) => {
+    try {
+      // Usamos los catálogos frescos si se pasan, si no los del estado
+      const catalogo = catalogoActual ?? logros;
+      const desbloqueados = desbloqueadosActual ?? logrosUsuario;
+      if (catalogo.length === 0) return;
+
+      const idsYaTiene = new Set(desbloqueados.map((ul) => ul.idLogro));
+      const pendientes = catalogo.filter(
+        (l) => !idsYaTiene.has(l.idLogro) && logroAplica(l, stats),
+      );
+      if (pendientes.length === 0) return;
+
+      await Promise.all(
+        pendientes.map((l) => asignarLogro(idUsuario, l.idLogro).catch(() => {})),
+      );
+      // Recargar logros para que el perfil muestre los nuevos badges
+      await loadLogros(idUsuario);
+    } catch { /* silencioso */ }
+  };
+
+  // ── handlers ────────────────────────────────────────────────────────────
 
   const handleStartPredefinedRoutine = (type: "pierna" | "torso") => {
     let selectedExercises: Exercise[] = [];
@@ -302,12 +564,16 @@ function App() {
         .slice(0, 3);
     }
     setActiveRoutine(selectedExercises);
+    setExerciseSets({});
+    setCurrentSavedRoutineId(null); // rutina predefinida, no tiene id de BD
     setIsWorkoutStarted(true);
     setCurrentView("workout");
   };
 
   const handleStartSavedRoutine = (routine: SavedRoutine) => {
     setActiveRoutine([...routine.exercises]);
+    setExerciseSets({});
+    setCurrentSavedRoutineId(Number(routine.id));
     setIsWorkoutStarted(true);
     setCurrentView("workout");
   };
@@ -317,99 +583,240 @@ function App() {
       (sum, ex) => sum + (ex.volume || 0),
       0,
     );
-    const workoutData = {
-      userId: 2,
-      date: new Date().toISOString(),
-      totalVolume: sessionVolume,
-      exercisesCount: activeRoutine.length,
-      exercises: activeRoutine,
-    };
-    try {
-      setTotalVolumeGlobal((prev) => prev + sessionVolume);
-      setWorkoutCount((prev) => prev + 1);
-      setIsWorkoutStarted(false);
-      setActiveRoutine([]);
-      setCurrentView("profile");
-      alert("¡ENTRENAMIENTO REGISTRADO EN EL OLIMPO!");
-    } catch (error) {
-      console.error("Error al registrar la sesión:", error);
+
+    // Stats frescas (calculadas localmente antes de que el setState sea procesado)
+    const nuevasSesiones = workoutCount + 1;
+    const nuevoVolumen   = totalVolumeGlobal + sessionVolume;
+
+    setWorkoutCount(nuevasSesiones);
+
+    // ── Guardar historial en MongoDB ──────────────────────────────────────
+    if (currentUser) {
+      try {
+        const ejerciciosData = activeRoutine
+          .map((ex, idx) => {
+            const sets = exerciseSets[ex.id] || [];
+            return {
+              idEjercicio: Number(ex.id),
+              orden: idx + 1,
+              series: sets.map((s, si) => ({
+                numeroSerie: si + 1,
+                pesoKG: s.weight,
+                repeticiones: s.reps,
+                descansoSegundo: s.restSeconds,
+              })),
+            };
+          })
+          .filter((e) => e.series.length > 0 && !isNaN(e.idEjercicio) && e.idEjercicio > 0);
+
+        if (ejerciciosData.length > 0) {
+          const nombreRutina = currentSavedRoutineId
+            ? savedRoutines.find((r) => r.id === String(currentSavedRoutineId))?.name ?? "RUTINA"
+            : "BATALLA LIBRE";
+
+          await createHistorial({
+            idUsuario: currentUser.idUsuario,
+            idRutina: currentSavedRoutineId ?? 0,
+            nombreRutina,
+            fechaFin: new Date().toISOString().slice(0, 19),
+            volumenTotalKG: sessionVolume,
+            ejercicios: ejerciciosData,
+          });
+          await loadHistorial(currentUser.idUsuario);
+        } else {
+          setTotalVolumeGlobal(nuevoVolumen);
+        }
+      } catch {
+        setTotalVolumeGlobal(nuevoVolumen);
+      }
+    } else {
+      setTotalVolumeGlobal(nuevoVolumen);
     }
+
+    // Limpiar estado de sesión
+    setIsWorkoutStarted(false);
+    setActiveRoutine([]);
+    setExerciseSets({});
+    setCurrentView("historial");
+
+    if (currentUser) {
+      // Logros vinculados a la rutina específica (logro_rutina)
+      if (currentSavedRoutineId) {
+        await checkAndAwardLogros(currentSavedRoutineId, currentUser.idUsuario);
+      }
+      // Logros por estadísticas: sesiones, volumen, retos
+      await evaluarLogros(currentUser.idUsuario, {
+        sesiones:      nuevasSesiones,
+        volumenKG:     nuevoVolumen,
+        retosGanados:  challengesWon,
+      });
+    }
+
+    setCurrentSavedRoutineId(null);
+    showToast("¡Entrenamiento registrado en el Olimpo!", "success");
   };
 
   const handleSaveRoutine = async () => {
-    if (newRoutineName.trim() === "") return;
-    const newRoutine: SavedRoutine = {
-      id: Date.now().toString(),
-      name: newRoutineName.toUpperCase(),
-      exercises: [...activeRoutine],
-    };
-    setSavedRoutines([...savedRoutines, newRoutine]);
-    setIsSavingRoutine(false);
-    setNewRoutineName("");
-    alert(`¡Rutina "${newRoutine.name}" guardada!`);
+    if (newRoutineName.trim() === "" || !currentUser) return;
+    setSaveRoutineError("");
+    setIsSavingToServer(true);
+
+    // Rastreamos el id creado para poder hacer rollback si el batch falla
+    let rutinaIdCreada: number | null = null;
+
+    try {
+      // ── 1. Crear la cabecera de la rutina ──────────────────────────────────
+      const res = await createRutina({
+        idUsuario: currentUser.idUsuario,
+        nombre: newRoutineName.trim().toUpperCase(),
+      });
+      const idRutina = res?.idRutina;
+
+      if (!idRutina || idRutina <= 0) {
+        throw new Error("El servidor no devolvió el ID de la rutina. ¿Reiniciaste el backend?");
+      }
+      rutinaIdCreada = idRutina; // desde aquí existe en el DB; si algo falla → rollback
+
+      // ── 2. Construir el batch para la tabla rutina_ejercicio ───────────────
+      const batch = activeRoutine
+        .map((ex, idx) => ({
+          idRutina,
+          idEjercicio: Number(ex.id),
+          orden: idx + 1,
+        }))
+        .filter((item) => !isNaN(item.idEjercicio) && item.idEjercicio > 0);
+
+      if (batch.length === 0 && activeRoutine.length > 0) {
+        // Los ejercicios son del catálogo hardcodeado (IDs inválidos para el backend)
+        throw new Error(
+          "Los ejercicios no están en el catálogo del servidor. " +
+          "Usa el buscador de ejercicios para agregar ejercicios reales.",
+        );
+      }
+
+      if (batch.length > 0) {
+        // Si el backend no encuentra algún ejercicio devuelve 404 (ya no 207)
+        await addEjerciciosBatch(batch);
+      }
+
+      // ── 3. Éxito: actualizar estado local ──────────────────────────────────
+      rutinaIdCreada = null; // cancelamos el rollback: todo salió bien
+      const newRoutine: SavedRoutine = {
+        id: String(idRutina),
+        name: newRoutineName.trim().toUpperCase(),
+        exercises: [...activeRoutine],
+      };
+      setSavedRoutines([...savedRoutines, newRoutine]);
+      setIsSavingRoutine(false);
+      setNewRoutineName("");
+
+      // ── 4. Verificar y otorgar logros vinculados a esta rutina ─────────────
+      if (currentUser) {
+        await checkAndAwardLogros(idRutina, currentUser.idUsuario);
+      }
+
+    } catch (err: any) {
+      // Rollback: si la rutina fue creada pero el batch falló, la eliminamos
+      if (rutinaIdCreada) {
+        await deleteRutina(rutinaIdCreada).catch(() => {});
+      }
+      setSaveRoutineError(err.message || "Error al guardar la rutina.");
+    } finally {
+      setIsSavingToServer(false);
+    }
   };
 
-  const handleRegister = async (data: {
-    name: string;
-    email: string;
-    age: number;
-    weight: number;
-    sex: string;
-  }) => {
-    const newUser: User = {
-      id: Date.now(),
-      name: data.name,
-      email: data.email,
-      role: "Guerrero",
-      status: "Activo",
-      age: data.age,
-      weight: data.weight,
-    };
-    setUsers([...users, newUser]);
-    setUserName(data.name);
+  const handleDeleteSavedRoutine = (id: string) => {
+    showConfirm(
+      "¿Eliminar esta rutina del sistema?",
+      async () => {
+        try {
+          await deleteRutina(Number(id));
+          setSavedRoutines(savedRoutines.filter((r) => r.id !== id));
+          showToast("Rutina eliminada.", "info");
+        } catch (err: any) {
+          showToast(err.message || "Error al eliminar la rutina.", "error");
+        }
+      },
+      { subMessage: "Esta acción no se puede deshacer.", confirmLabel: "Eliminar", danger: true }
+    );
+  };
+
+  const handleLogin = async (userData: UsuarioBackend) => {
+    // Persistir sesión para sobrevivir recargas
+    localStorage.setItem(SESSION_KEY, JSON.stringify(userData));
+
+    setCurrentUser(userData);
+    setUserName(userData.nombre);
     setIsLoggedIn(true);
     setCurrentView("routines");
+
+    // Cargar ejercicios y rutinas en paralelo
+    try {
+      const [ejerciciosData] = await Promise.all([
+        getEjercicios().catch(() => []),
+      ]);
+      const exerciseList: Exercise[] =
+        Array.isArray(ejerciciosData) && ejerciciosData.length > 0
+          ? ejerciciosData.map((e) => ({
+              id: String(e.idEjercicio),
+              name: e.nombre,
+              muscle: e.musculo,
+              imageUrl:
+                e.imagen ||
+                "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?q=80&w=200",
+            }))
+          : globalExercises;
+
+      if (Array.isArray(ejerciciosData) && ejerciciosData.length > 0) {
+        setGlobalExercises(exerciseList);
+      }
+
+      await Promise.all([
+        loadUserRoutines(userData.idUsuario, exerciseList),
+        loadChallenges(),
+        loadLogros(userData.idUsuario),
+        loadUserStats(userData.idUsuario),
+        loadHistorial(userData.idUsuario),
+      ]);
+    } catch {
+      // Si falla, quedamos con los datos locales
+    }
   };
 
   // ── guards ───────────────────────────────────────────────────────────────
 
   if (!isLoggedIn) {
-    return (
-      <LoadingView
-        onLogin={(n) => {
-          setUserName(n);
-          setIsLoggedIn(true);
-          setCurrentView("routines");
-        }}
-        onRegister={handleRegister}
-      />
-    );
+    return <LoadingView onLogin={handleLogin} />;
   }
 
-  if (loading) {
-    return (
-      <div
-        style={{
-          background: T.bg,
-          minHeight: "100vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontFamily: T.font,
-          color: T.red,
-          fontSize: 32,
-          letterSpacing: 8,
-        }}
-      >
-        CARGANDO…
-      </div>
-    );
-  }
 
   // ── render ───────────────────────────────────────────────────────────────
 
   return (
     <div style={{ background: T.bg, minHeight: "100vh", color: T.text }}>
+
+      {/* ── Toast global ─────────────────────────────────────────────────── */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
+
+      {/* ── Confirm Modal global ─────────────────────────────────────────── */}
+      {confirmModal && (
+        <ConfirmModal
+          message={confirmModal.message}
+          subMessage={confirmModal.subMessage}
+          confirmLabel={confirmModal.confirmLabel}
+          danger={confirmModal.danger}
+          onConfirm={confirmModal.onConfirm}
+          onCancel={() => setConfirmModal(null)}
+        />
+      )}
+
       {/* Google Fonts */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Playfair+Display:ital,wght@0,700;1,400&display=swap');
@@ -423,10 +830,31 @@ function App() {
 
       <NavBar
         currentView={currentView}
-        onViewChange={setCurrentView}
-        onLogout={() => setIsLoggedIn(false)}
+        onViewChange={(v) => setCurrentView(v)}
+        onLogout={() => {
+          localStorage.removeItem(SESSION_KEY);
+          setIsLoggedIn(false);
+          setCurrentUser(null);
+          setUserName("Guerrero");
+          setHistorial([]);
+          setExerciseSets({});
+          setSavedRoutines([]);
+          setChallenges([]);
+        }}
         userName={userName}
       />
+
+      {/* ── Historial ───────────────────────────────────────────────────── */}
+      {currentView === "historial" && (
+        <HistorialView
+          historial={historial}
+          onReloadHistorial={() =>
+            currentUser ? loadHistorial(currentUser.idUsuario) : Promise.resolve()
+          }
+          showToast={showToast}
+          showConfirm={showConfirm}
+        />
+      )}
 
       {/* ── Profile ─────────────────────────────────────────────────────── */}
       {currentView === "profile" && (
@@ -435,16 +863,30 @@ function App() {
           totalWorkouts={workoutCount}
           challengesWon={challengesWon}
           totalVolumeKg={totalVolumeGlobal}
+          logros={logros}
+          logrosUsuario={logrosUsuario}
         />
       )}
 
       {/* ── Olimpo ──────────────────────────────────────────────────────── */}
-      {currentView === "olimpo" && (
+      {currentView === "olimpo" && currentUser && (
         <OlimpoView
-          userName={userName}
+          currentUser={currentUser}
           challenges={challenges}
-          setChallenges={setChallenges}
-          onWinChallenge={() => setChallengesWon((prev) => prev + 1)}
+          onReloadChallenges={loadChallenges}
+          onWinChallenge={() => {
+            const nuevosRetos = challengesWon + 1;
+            setChallengesWon(nuevosRetos);
+            if (currentUser) {
+              evaluarLogros(currentUser.idUsuario, {
+                sesiones:     workoutCount,
+                volumenKG:    totalVolumeGlobal,
+                retosGanados: nuevosRetos,
+              }).catch(() => {});
+            }
+          }}
+          showToast={showToast}
+          showConfirm={showConfirm}
         />
       )}
 
@@ -452,11 +894,13 @@ function App() {
       {currentView === "admin" && (
         <AdminView
           challenges={challenges}
-          setChallenges={setChallenges}
-          users={users}
-          setUsers={setUsers}
+          onReloadChallenges={loadChallenges}
+          logros={logros}
+          onReloadLogros={() => currentUser ? loadLogros(currentUser.idUsuario) : Promise.resolve()}
           exercises={globalExercises}
           setExercises={setGlobalExercises}
+          showToast={showToast}
+          showConfirm={showConfirm}
         />
       )}
 
@@ -557,13 +1001,48 @@ function App() {
                 }}
               >
                 {savedRoutines.map((routine) => (
-                  <RoutineCard
-                    key={routine.id}
-                    title={routine.name}
-                    accent={T.gold}
-                    onStart={() => handleStartSavedRoutine(routine)}
-                    btnVariant="gold"
-                  />
+                  <div key={routine.id} style={{ position: "relative" }}>
+                    <RoutineCard
+                      title={routine.name}
+                      accent={T.gold}
+                      subtitle={
+                        routine.exercises.length > 0
+                          ? `${routine.exercises.length} ejercicio${routine.exercises.length !== 1 ? "s" : ""}`
+                          : undefined
+                      }
+                      onStart={() => handleStartSavedRoutine(routine)}
+                      btnVariant="gold"
+                    />
+                    {/* Botón eliminar */}
+                    <button
+                      onClick={() => handleDeleteSavedRoutine(routine.id)}
+                      title="Eliminar rutina"
+                      style={{
+                        position: "absolute",
+                        top: 12,
+                        right: 12,
+                        background: `${T.red}18`,
+                        border: `1px solid ${T.red}44`,
+                        borderRadius: 2,
+                        color: T.red,
+                        fontFamily: T.font,
+                        fontSize: 11,
+                        fontWeight: 700,
+                        letterSpacing: 1,
+                        padding: "4px 8px",
+                        cursor: "pointer",
+                        transition: "all 0.2s",
+                      }}
+                      onMouseEnter={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.background = `${T.red}33`;
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.background = `${T.red}18`;
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
                 ))}
               </div>
             </>
@@ -694,32 +1173,49 @@ function App() {
                 borderRadius: 4,
                 padding: "20px 24px",
                 marginBottom: 32,
-                display: "flex",
-                gap: 12,
               }}
             >
-              <input
-                type="text"
-                placeholder="NOMBRE DE LA RUTINA…"
-                value={newRoutineName}
-                onChange={(e) => setNewRoutineName(e.target.value)}
-                style={{
-                  flex: 1,
-                  background: T.surface,
-                  border: `1px solid ${T.border}`,
-                  borderRadius: 2,
-                  color: T.text,
-                  fontFamily: T.font,
-                  fontSize: 13,
-                  fontWeight: 700,
-                  letterSpacing: 2,
-                  padding: "10px 16px",
-                  outline: "none",
-                }}
-              />
-              <GlowBtn variant="gold" size="md" onClick={handleSaveRoutine}>
-                Guardar
-              </GlowBtn>
+              <div style={{ display: "flex", gap: 12, marginBottom: saveRoutineError ? 10 : 0 }}>
+                <input
+                  type="text"
+                  placeholder="NOMBRE DE LA RUTINA…"
+                  value={newRoutineName}
+                  onChange={(e) => { setNewRoutineName(e.target.value); setSaveRoutineError(""); }}
+                  disabled={isSavingToServer}
+                  style={{
+                    flex: 1,
+                    background: T.surface,
+                    border: `1px solid ${T.border}`,
+                    borderRadius: 2,
+                    color: T.text,
+                    fontFamily: T.font,
+                    fontSize: 13,
+                    fontWeight: 700,
+                    letterSpacing: 2,
+                    padding: "10px 16px",
+                    outline: "none",
+                    opacity: isSavingToServer ? 0.6 : 1,
+                  }}
+                />
+                <GlowBtn
+                  variant="gold"
+                  size="md"
+                  onClick={handleSaveRoutine}
+                  disabled={isSavingToServer || newRoutineName.trim() === ""}
+                >
+                  {isSavingToServer ? "GUARDANDO..." : "Guardar"}
+                </GlowBtn>
+              </div>
+              {saveRoutineError && (
+                <div style={{
+                  fontFamily: T.font, fontSize: 12, letterSpacing: 1,
+                  color: T.red, background: `${T.red}12`,
+                  border: `1px solid ${T.red}44`, borderRadius: 2,
+                  padding: "8px 12px",
+                }}>
+                  ⚠ {saveRoutineError}
+                </div>
+              )}
             </div>
           )}
 
@@ -896,6 +1392,9 @@ function App() {
                           e.id === exercise.id ? { ...e, volume: vol } : e,
                         ),
                       );
+                    }}
+                    onUpdateSets={(sets) => {
+                      setExerciseSets((prev) => ({ ...prev, [exercise.id]: sets }));
                     }}
                   />
                 </div>

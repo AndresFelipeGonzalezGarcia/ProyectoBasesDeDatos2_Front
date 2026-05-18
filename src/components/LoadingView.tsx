@@ -1,7 +1,9 @@
 import bug from "../assets/bug.png";
 import { useState } from "react";
+import { loginUser, registerUser } from "../service/api";
+import type { UsuarioBackend } from "../Types";
 
-// ─── Design Tokens (Sincronizados con App.tsx) ─────────────────────────────
+// ─── Design Tokens ──────────────────────────────────────────────────────────
 const T = {
   bg: "#0a0a0a",
   surface: "#111111",
@@ -15,28 +17,21 @@ const T = {
   serif: "'Playfair Display', serif",
 };
 
-// ─── GlowBtn Component ──────────────────────────────────────────────────────
+// ─── GlowBtn ────────────────────────────────────────────────────────────────
 interface GlowBtnProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: "red" | "ghost";
   size?: "md" | "lg";
 }
 
-const GlowBtn = ({
-  children,
-  variant = "red",
-  size = "md",
-  style,
-  ...props
-}: GlowBtnProps) => {
+const GlowBtn = ({ children, variant = "red", size = "md", style, ...props }: GlowBtnProps) => {
   const map = {
     red: { color: T.red, bg: `${T.red}18`, hover: `${T.red}30` },
     ghost: { color: T.text, bg: "transparent", hover: "#ffffff0d" },
   };
   const v = map[variant];
-  const sz =
-    size === "lg"
-      ? { padding: "14px 40px", fontSize: 16 }
-      : { padding: "10px 28px", fontSize: 14 };
+  const sz = size === "lg"
+    ? { padding: "14px 40px", fontSize: 16 }
+    : { padding: "10px 28px", fontSize: 14 };
 
   return (
     <button
@@ -58,13 +53,11 @@ const GlowBtn = ({
       }}
       onMouseEnter={(e) => {
         (e.currentTarget as HTMLButtonElement).style.background = v.hover;
-        (e.currentTarget as HTMLButtonElement).style.boxShadow =
-          `0 0 28px ${v.color}55`;
+        (e.currentTarget as HTMLButtonElement).style.boxShadow = `0 0 28px ${v.color}55`;
       }}
       onMouseLeave={(e) => {
         (e.currentTarget as HTMLButtonElement).style.background = v.bg;
-        (e.currentTarget as HTMLButtonElement).style.boxShadow =
-          `0 0 16px ${v.color}22`;
+        (e.currentTarget as HTMLButtonElement).style.boxShadow = `0 0 16px ${v.color}22`;
       }}
     >
       {children}
@@ -72,47 +65,71 @@ const GlowBtn = ({
   );
 };
 
-// ─── Interfaces & Main Component ────────────────────────────────────────────
+// ─── Props ──────────────────────────────────────────────────────────────────
 interface LoadingProps {
-  onLogin: (name: string, password: string) => void;
-  onRegister: (data: {
-    name: string;
-    email: string;
-    age: number;
-    weight: number;
-    sex: string;
-  }) => void;
+  onLogin: (userData: UsuarioBackend) => void;
 }
 
-function LoadingView({ onLogin, onRegister }: LoadingProps) {
-  const [showForm, setShowForm] = useState(false);
-  const [isLogin, setIsLogin] = useState(true);
+// ─── Component ──────────────────────────────────────────────────────────────
+function LoadingView({ onLogin }: LoadingProps) {
+  const [showForm, setShowForm]   = useState(false);
+  const [isLogin, setIsLogin]     = useState(true);
+  const [loading, setLoading]     = useState(false);
+  const [error, setError]         = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
 
-  const [warriorName, setWarriorName] = useState("");
-  const [email, setEmail] = useState("");
+  // Campos compartidos
+  const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
-  const [age, setAge] = useState("");
-  const [weight, setWeight] = useState("");
-  const [sex, setSex] = useState("m");
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isLogin) {
-      onLogin(warriorName.trim(), password);
-    } else {
-      onRegister({
-        name: warriorName.trim(),
-        email: email,
-        age: Number(age),
-        weight: Number(weight),
-        sex: sex,
-      });
-    }
-  };
+  // Campos solo de registro
+  const [nombre, setNombre]   = useState("");
+  const [age, setAge]         = useState("");
+  const [weight, setWeight]   = useState("");
+  const [sex, setSex]         = useState("Masculino");
 
   const blockInvalidNumberKeys = (e: React.KeyboardEvent) => {
-    if (["e", "E", "+", "-", ".", ","].includes(e.key)) {
-      e.preventDefault();
+    if (["e", "E", "+", "-", ".", ","].includes(e.key)) e.preventDefault();
+  };
+
+  const resetForm = () => {
+    setEmail(""); setPassword(""); setNombre("");
+    setAge(""); setWeight(""); setSex("Masculino");
+    setError(""); setSuccessMsg("");
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setSuccessMsg("");
+    setLoading(true);
+
+    try {
+      if (isLogin) {
+        // ── LOGIN ─────────────────────────────────────────────────────────
+        const userData = await loginUser(email.trim(), password);
+        onLogin(userData);
+
+      } else {
+        // ── REGISTRO ──────────────────────────────────────────────────────
+        await registerUser({
+          correoUsuario: email.trim(),
+          claveUsuario: password,
+          nombre: nombre.trim(),
+          edad: Number(age),
+          peso: Number(weight),
+          genero: sex,
+          idRol: 2,
+        });
+
+        setSuccessMsg("¡Perfil forjado! Ahora inicia sesión.");
+        resetForm();
+        setIsLogin(true);
+      }
+    } catch (err: any) {
+      setError(err.message || "Error al conectar con el servidor.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -127,7 +144,6 @@ function LoadingView({ onLogin, onRegister }: LoadingProps) {
         color: T.text,
       }}
     >
-      {/* ─── Estilos Inyectados para Inputs ─── */}
       <style>{`
         .buggy-input {
           background: ${T.surface};
@@ -149,10 +165,7 @@ function LoadingView({ onLogin, onRegister }: LoadingProps) {
           box-shadow: 0 0 12px ${T.red}22;
           background: ${T.elevated};
         }
-        .buggy-input::placeholder {
-          color: ${T.muted};
-          font-weight: 400;
-        }
+        .buggy-input::placeholder { color: ${T.muted}; font-weight: 400; }
         .buggy-label {
           font-family: ${T.font};
           font-size: 11px;
@@ -165,16 +178,12 @@ function LoadingView({ onLogin, onRegister }: LoadingProps) {
         }
       `}</style>
 
+      {/* ── Pantalla inicial ─────────────────────────────────────────────── */}
       {!showForm ? (
-        <div className="animate__animated animate__fadeInDown px-3">
+        <div className="px-3">
           <div style={{ height: "400px", overflow: "hidden" }}>
-            <img
-              src={bug}
-              alt="Logo"
-              style={{ width: "500px", marginTop: "-50px" }}
-            />
+            <img src={bug} alt="Logo" style={{ width: "500px", marginTop: "-50px" }} />
           </div>
-
           <h1
             style={{
               fontFamily: T.serif,
@@ -200,14 +209,14 @@ function LoadingView({ onLogin, onRegister }: LoadingProps) {
           >
             Forja tu leyenda · Conquista el olimpo
           </p>
-
           <GlowBtn variant="red" size="lg" onClick={() => setShowForm(true)}>
             INGRESAR AL SISTEMA
           </GlowBtn>
         </div>
+
       ) : (
+        /* ── Formulario ─────────────────────────────────────────────────── */
         <div
-          className="animate__animated animate__zoomIn"
           style={{
             width: "90%",
             maxWidth: "480px",
@@ -221,15 +230,12 @@ function LoadingView({ onLogin, onRegister }: LoadingProps) {
             overflow: "hidden",
           }}
         >
-          {/* Brillo de fondo sutil */}
+          {/* Brillo de fondo */}
           <div
             style={{
-              position: "absolute",
-              top: 0,
-              left: "50%",
+              position: "absolute", top: 0, left: "50%",
               transform: "translateX(-50%)",
-              width: 300,
-              height: 150,
+              width: 300, height: 150,
               background: `radial-gradient(ellipse at top, ${T.red}12 0%, transparent 70%)`,
               pointerEvents: "none",
             }}
@@ -237,101 +243,87 @@ function LoadingView({ onLogin, onRegister }: LoadingProps) {
 
           <h2
             style={{
-              fontFamily: T.serif,
-              fontSize: 32,
-              fontWeight: 700,
-              color: T.text,
-              marginBottom: 32,
-              letterSpacing: 1,
+              fontFamily: T.serif, fontSize: 32, fontWeight: 700,
+              color: T.text, marginBottom: 32, letterSpacing: 1,
             }}
           >
-            {isLogin ? (
-              "Identifícate"
-            ) : (
-              <>
-                Nuevo{" "}
-                <em style={{ color: T.red, fontStyle: "italic" }}>Guerrero</em>
-              </>
+            {isLogin ? "Identifícate" : (
+              <>Nuevo <em style={{ color: T.red, fontStyle: "italic" }}>Guerrero</em></>
             )}
           </h2>
 
-          <form
-            onSubmit={handleSubmit}
-            className="text-start"
-            style={{ position: "relative", zIndex: 1 }}
-          >
-            <div className="mb-4 animate__animated animate__fadeIn">
-              <label className="buggy-label">NOMBRE DE USUARIO</label>
+          <form onSubmit={handleSubmit} className="text-start" style={{ position: "relative", zIndex: 1 }}>
+
+            {/* Nombre — solo en registro */}
+            {!isLogin && (
+              <div className="mb-4">
+                <label className="buggy-label">NOMBRE DE GUERRERO</label>
+                <input
+                  type="text"
+                  className="buggy-input"
+                  required
+                  placeholder="EJ: EL_TANQUE"
+                  value={nombre}
+                  onChange={(e) => setNombre(e.target.value)}
+                />
+              </div>
+            )}
+
+            {/* Email */}
+            <div className="mb-4">
+              <label className="buggy-label">CORREO ELECTRÓNICO</label>
               <input
-                type="text"
+                type="email"
                 className="buggy-input"
                 required
-                placeholder="EJ: EL_TANQUE"
-                value={warriorName}
-                onChange={(e) => setWarriorName(e.target.value)}
+                placeholder="CORREO@OLIMPO.COM"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
               />
             </div>
 
+            {/* Edad y Peso — solo en registro */}
             {!isLogin && (
-              <div className="animate__animated animate__fadeIn">
+              <>
                 <div className="row mb-4 gx-3">
                   <div className="col-6">
                     <label className="buggy-label">EDAD</label>
                     <input
-                      type="number"
-                      min="0"
-                      className="buggy-input"
-                      required
-                      placeholder="AÑOS"
-                      value={age}
-                      onChange={(e) => setAge(e.target.value)}
+                      type="number" min="1" className="buggy-input"
+                      required placeholder="AÑOS"
+                      value={age} onChange={(e) => setAge(e.target.value)}
                       onKeyDown={blockInvalidNumberKeys}
                     />
                   </div>
                   <div className="col-6">
                     <label className="buggy-label">PESO (KG)</label>
                     <input
-                      type="number"
-                      min="0"
-                      className="buggy-input"
-                      required
-                      value={weight}
-                      onChange={(e) => setWeight(e.target.value)}
-                      placeholder="KG"
+                      type="number" min="1" className="buggy-input"
+                      required placeholder="KG"
+                      value={weight} onChange={(e) => setWeight(e.target.value)}
                       onKeyDown={blockInvalidNumberKeys}
                     />
                   </div>
                 </div>
 
                 <div className="mb-4">
-                  <label className="buggy-label">SEXO</label>
+                  <label className="buggy-label">GÉNERO</label>
                   <select
                     className="buggy-input"
                     style={{ cursor: "pointer" }}
                     value={sex}
                     onChange={(e) => setSex(e.target.value)}
                   >
-                    <option value="m">MASCULINO</option>
-                    <option value="f">FEMENINO</option>
-                    <option value="o">OTRO</option>
+                    <option value="Masculino">MASCULINO</option>
+                    <option value="Femenino">FEMENINO</option>
+                    <option value="Otro">OTRO</option>
                   </select>
                 </div>
-
-                <div className="mb-4">
-                  <label className="buggy-label">CORREO ELECTRÓNICO</label>
-                  <input
-                    type="email"
-                    className="buggy-input"
-                    required
-                    placeholder="CORREO@OLIMPO.COM"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                  />
-                </div>
-              </div>
+              </>
             )}
 
-            <div className="mb-5">
+            {/* Contraseña */}
+            <div className="mb-3">
               <label className="buggy-label">CONTRASEÑA</label>
               <input
                 type="password"
@@ -341,47 +333,69 @@ function LoadingView({ onLogin, onRegister }: LoadingProps) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
+              {/* Hint de requisitos solo en registro */}
+              {!isLogin && (
+                <p style={{ fontFamily: T.font, fontSize: 10, color: T.muted, letterSpacing: 1, marginTop: 6 }}>
+                  Mín. 8 caracteres · Mayúscula · Número · Especial (@#$%^&+=!)
+                </p>
+              )}
             </div>
 
-            <GlowBtn
-              variant="red"
-              size="lg"
-              style={{ width: "100%" }}
-              type="submit"
-            >
-              {isLogin ? "ENTRAR A LA ARENA" : "FORJAR PERFIL"}
-            </GlowBtn>
+            {/* Mensaje de error */}
+            {error && (
+              <div
+                style={{
+                  fontFamily: T.font, fontSize: 12, letterSpacing: 1,
+                  color: T.red, background: `${T.red}12`,
+                  border: `1px solid ${T.red}44`, borderRadius: 2,
+                  padding: "10px 14px", marginBottom: 16, textAlign: "center",
+                }}
+              >
+                ⚠ {error}
+              </div>
+            )}
+
+            {/* Mensaje de éxito */}
+            {successMsg && (
+              <div
+                style={{
+                  fontFamily: T.font, fontSize: 12, letterSpacing: 1,
+                  color: "#4ade80", background: "#4ade8012",
+                  border: `1px solid #4ade8044`, borderRadius: 2,
+                  padding: "10px 14px", marginBottom: 16, textAlign: "center",
+                }}
+              >
+                ✓ {successMsg}
+              </div>
+            )}
+
+            <div className="mt-4">
+              <GlowBtn
+                variant="red" size="lg"
+                style={{ width: "100%" }}
+                type="submit"
+                disabled={loading}
+              >
+                {loading ? "CARGANDO..." : isLogin ? "ENTRAR A LA ARENA" : "FORJAR PERFIL"}
+              </GlowBtn>
+            </div>
           </form>
 
-          <div
-            style={{
-              marginTop: 32,
-              paddingTop: 24,
-              borderTop: `1px solid ${T.border}`,
-              textAlign: "center",
-            }}
-          >
+          {/* Toggle login/registro */}
+          <div style={{ marginTop: 32, paddingTop: 24, borderTop: `1px solid ${T.border}`, textAlign: "center" }}>
             <button
               type="button"
               style={{
-                background: "none",
-                border: "none",
-                fontFamily: T.font,
-                fontSize: 12,
-                letterSpacing: 2,
-                color: T.muted,
-                cursor: "pointer",
-                transition: "color 0.2s",
-                textTransform: "uppercase",
-                fontWeight: 600,
+                background: "none", border: "none",
+                fontFamily: T.font, fontSize: 12, letterSpacing: 2,
+                color: T.muted, cursor: "pointer",
+                transition: "color 0.2s", textTransform: "uppercase", fontWeight: 600,
               }}
               onMouseEnter={(e) => (e.currentTarget.style.color = T.text)}
               onMouseLeave={(e) => (e.currentTarget.style.color = T.muted)}
-              onClick={() => setIsLogin(!isLogin)}
+              onClick={() => { setIsLogin(!isLogin); resetForm(); }}
             >
-              {isLogin
-                ? "¿Sin acceso? Regístrate aquí"
-                : "¿Ya tienes lugar? Inicia sesión"}
+              {isLogin ? "¿Sin acceso? Regístrate aquí" : "¿Ya tienes lugar? Inicia sesión"}
             </button>
           </div>
         </div>

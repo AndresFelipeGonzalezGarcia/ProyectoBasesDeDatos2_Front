@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import RestTimer from "./RestTimer";
+import type { WorkoutSet } from "../Types";
 
 interface ExerciseProps {
   name: string;
@@ -7,11 +8,7 @@ interface ExerciseProps {
   imageUrl: string;
   onRemove: () => void;
   onUpdateVolume?: (volume: number) => void;
-}
-
-interface WorkoutSet {
-  weight: number;
-  reps: number;
+  onUpdateSets?: (sets: WorkoutSet[]) => void;
 }
 
 function ExerciseCard({
@@ -20,6 +17,7 @@ function ExerciseCard({
   imageUrl,
   onRemove,
   onUpdateVolume,
+  onUpdateSets,
 }: ExerciseProps) {
   const [sets, setSets] = useState<WorkoutSet[]>([]);
   const [currentWeight, setCurrentWeight] = useState("");
@@ -35,13 +33,22 @@ function ExerciseCard({
       );
       onUpdateVolume(totalVolume);
     }
-  }, [sets, onUpdateVolume]);
+    if (onUpdateSets) {
+      onUpdateSets(sets);
+    }
+    // onUpdateVolume y onUpdateSets se omiten del array de dependencias intencionalmente:
+    // son funciones inline que cambian referencia en cada render del padre,
+    // lo que causaría un loop infinito. El efecto solo debe correr cuando
+    // cambian los sets.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sets]);
 
   const handleSaveSet = () => {
     if (currentWeight && currentReps) {
       const newSet: WorkoutSet = {
         weight: Number(currentWeight),
         reps: Number(currentReps),
+        restSeconds: restSeconds,
       };
       setSets([...sets, newSet]);
       setCurrentWeight("");
@@ -125,7 +132,7 @@ function ExerciseCard({
               <div className="col-2 fw-bold text-danger">{index + 1}</div>
               <div className="col-3 fw-bold">{set.weight}</div>
               <div className="col-3 fw-bold">{set.reps}</div>
-              <div className="col-2 text-secondary small">-</div>
+              <div className="col-2 text-secondary small">{set.restSeconds}s</div>
               <div className="col-2">
                 <button
                   className="btn btn-sm btn-outline-secondary border-0 text-muted"

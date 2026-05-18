@@ -1,9 +1,9 @@
 import bug from "../assets/bug.png";
 
 interface NavBarProps {
-  currentView: "routines" | "workout" | "olimpo" | "profile" | "admin";
+  currentView: "routines" | "workout" | "olimpo" | "profile" | "admin" | "historial";
   onViewChange: (
-    view: "routines" | "workout" | "olimpo" | "profile" | "admin",
+    view: "routines" | "workout" | "olimpo" | "profile" | "admin" | "historial",
   ) => void;
   onLogout: () => void;
   userName: string;
@@ -22,7 +22,7 @@ const T = {
   serif: "'Playfair Display', serif",
 };
 
-type View = "routines" | "workout" | "olimpo" | "profile" | "admin";
+type View = "routines" | "workout" | "olimpo" | "profile" | "admin" | "historial";
 
 interface NavItemProps {
   label: React.ReactNode;
@@ -180,6 +180,12 @@ function NavBar({
               currentView={currentView}
               onViewChange={onViewChange}
               accent={T.gold}
+            />
+            <NavItem
+              label="Historial"
+              view="historial"
+              currentView={currentView}
+              onViewChange={onViewChange}
             />
             <NavItem
               label="Perfil"
